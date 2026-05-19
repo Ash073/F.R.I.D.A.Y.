@@ -84,16 +84,19 @@ const APP_FOLLOW_UPS = {
     }
   },
   "spotify": {
-    question: "What would you like to play on Spotify? Say a song, artist, or playlist name, or 'skip' to just open Spotify.",
+    question: "What do you want to play on Spotify?",
     handler: async (answer) => {
       const a = answer.toLowerCase().trim();
       if (a === "skip" || a === "no" || a === "just open it" || a === "nothing") {
         return { ok: true, message: "Opening Spotify on F.R.I.D.A.Y.", openSpotify: true };
       }
-      // Open Spotify search
-      const url = `https://open.spotify.com/search/${encodeURIComponent(answer.trim())}`;
-      await shellExec(`start "" "${url}"`);
-      return { ok: true, message: `Searching Spotify for "${answer.trim()}".` };
+      // Direct stream play inside virtual Electron player!
+      const { execute } = require("./executor");
+      const playResult = await execute({
+        intent: "spotify_play",
+        params: { query: answer.trim() }
+      });
+      return playResult;
     }
   },
   "instagram": {
@@ -151,11 +154,11 @@ async function handleOpenApp({ app }) {
     const followUp = APP_FOLLOW_UPS[appKey];
 
     if (followUp) {
-      // Don't open the app yet — ask the follow-up question first
       console.log(`[FRIDAY] OPEN_APP → ${a.name} (has follow-up question)`);
       return {
         ok: true,
         message: `Sure, I can open ${a.name}. ${followUp.question}`,
+        openSpotify: appKey === "spotify",
         followUp: {
           type: "OPEN_APP_FOLLOWUP",
           app: appKey,
