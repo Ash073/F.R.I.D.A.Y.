@@ -13,6 +13,30 @@ export interface TranscribeResult {
   result?: { message?: string; ok?: boolean; followUp?: any; type?: string; [key: string]: any };
 }
 
+// High-resilience, CORS-free Smart Fetch that routes directly from the React context
+export async function smartFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const targetPath = path.startsWith('/') ? path : `/${path}`;
+  const ports = ['3131', '8888'];
+  
+  for (const port of ports) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 2000);
+    try {
+      const res = await fetch(`http://localhost:${port}${targetPath}`, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(id);
+      return res;
+    } catch (err) {
+      clearTimeout(id);
+    }
+  }
+
+  // Fallback to cloud
+  return await fetch(`https://f-r-i-d-a-y-8ixf.onrender.com${targetPath}`, options);
+}
+
 export interface VoiceProfile {
   pitchMin: number;
   pitchMax: number;
@@ -394,11 +418,7 @@ export function useFridayVoicePipeline(
     }
 
     try {
-      const res = (window as any).friday && (window as any).friday.fridayFetch
-        ? await (window as any).friday.fridayFetch('command', '/transcribe', { method: 'POST', body: fd })
-        : (window as any).fridayFetch
-        ? await (window as any).fridayFetch('command', '/transcribe', { method: 'POST', body: fd })
-        : await fetch('https://f-r-i-d-a-y-8ixf.onrender.com/transcribe', { method: 'POST', body: fd });
+      const res = await smartFetch('/transcribe', { method: 'POST', body: fd });
       const data = await res.json();
       if (data.text) {
         console.log(`[FRIDAY] "${data.text}" (conf=${data.confidence})`);

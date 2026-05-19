@@ -6,7 +6,7 @@ import HUDOverlay from './components/HUDOverlay';
 import QuickAccessTray from './components/QuickAccessTray';
 import SettingsDrawer from './components/SettingsDrawer';
 import SystemMetricsDashboard from './components/SystemMetricsDashboard';
-import { useFridayVoicePipeline, TranscribeResult, VoiceProfile } from './hooks/useFridayVoicePipeline';
+import { useFridayVoicePipeline, TranscribeResult, VoiceProfile, smartFetch } from './hooks/useFridayVoicePipeline';
 import VoiceProfileWizard from './components/VoiceProfileWizard';
 
 type AssistantState = 'idle' | 'listening' | 'processing' | 'speaking';
@@ -224,20 +224,11 @@ export default function App() {
     setMessages(prev => [...prev, { role: 'user', text }]);
     setState('processing'); setStatus('PROCESSING_QUERY');
     try {
-      const res = (window as any).friday && (window as any).friday.fridayFetch
-        ? await (window as any).friday.fridayFetch('command', '/api/chat', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text })
-          })
-        : (window as any).fridayFetch
-        ? await (window as any).fridayFetch('command', '/api/chat', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text })
-          })
-        : await fetch('https://f-r-i-d-a-y-8ixf.onrender.com/api/chat', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text })
-          });
+      const res = await smartFetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
       const data = await res.json();
       if (data.text) {
         setMessages(prev => [...prev, { role: 'assistant', text: data.text }]);
