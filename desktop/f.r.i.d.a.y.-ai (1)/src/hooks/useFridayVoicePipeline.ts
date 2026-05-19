@@ -394,7 +394,9 @@ export function useFridayVoicePipeline(
     }
 
     try {
-      const res = await fetch('https://f-r-i-d-a-y-8ixf.onrender.com/transcribe', { method: 'POST', body: fd });
+      const res = (window as any).fridayFetch
+        ? await (window as any).fridayFetch('command', '/transcribe', { method: 'POST', body: fd })
+        : await fetch('https://f-r-i-d-a-y-8ixf.onrender.com/transcribe', { method: 'POST', body: fd });
       const data = await res.json();
       if (data.text) {
         console.log(`[FRIDAY] "${data.text}" (conf=${data.confidence})`);

@@ -499,6 +499,11 @@
     const msg = result.message || JSON.stringify(result);
     const type = result.type || intent?.type || 'command';
 
+    // Open Spotify immediately if requested (e.g. before follow-up questions)
+    if (result.openSpotify && window.friday && window.friday.openSpotify) {
+      window.friday.openSpotify();
+    }
+
     if (result.followUp) {
       pendingFollowUp = result.followUp;
       startFollowUpTimer();
@@ -512,10 +517,6 @@
 
     // Clear input now that we have a final result
     cmdInput.value = '';
-
-    if (result.openSpotify && window.friday && window.friday.openSpotify) {
-      window.friday.openSpotify();
-    }
 
     if (type === 'command') {
       setStatus('Executing...');
@@ -535,7 +536,7 @@
     setStatus('Processing...');
 
     try {
-      const res = await fetch("https://f-r-i-d-a-y-8ixf.onrender.com/followup", {
+      const res = await window.fridayFetch('command', '/followup', {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ followUpContext: context, answer: answerText })
@@ -641,8 +642,13 @@
       }
       if (!lang.startsWith("en")) continue;
       if (PREFERRED_VOICE.preferFemale) {
-        if (/female|woman|zira|hazel|susan|kate|moira|samantha|jenny|aria|sonia/i.test(name)) score += 25;
-        if (/\bmale\b|\bman\b|david|mark|george|james|ryan|guy\b/i.test(name)) score -= 20;
+        // Exclude male voices entirely when preferring female
+        if (/\bmale\b|\bman\b|david|mark|george|james|ryan|guy|ravi/i.test(name)) {
+          continue;
+        }
+        if (/female|woman|zira|hazel|susan|kate|moira|samantha|jenny|aria|sonia|heera/i.test(name)) {
+          score += 25;
+        }
       }
       if (/natural|neural|online/i.test(name)) score += 5;
       if (v.localService) score += 3;
