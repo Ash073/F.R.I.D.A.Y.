@@ -99,7 +99,7 @@ export default function QuickAccessTray({ accentColor = '#ff8c00' }: { accentCol
         const homeApp: AppConfig = { 
             id: 'home', 
             icon: Home, 
-            label: 'Minimize OS', 
+            label: 'Close Friday', 
             action: () => (window as any).friday?.minimize() 
         };
 

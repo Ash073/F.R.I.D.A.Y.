@@ -35,6 +35,7 @@ function createWindow() {
       preload:          path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration:  false,
+      webSecurity:      false, // Allows file:// page to fetch from http://localhost:3131 CORS-free!
     },
   });
 
@@ -64,11 +65,8 @@ app.whenReady().then(createWindow);
 app.on("window-all-closed", () => app.quit());
 
 ipcMain.on("friday:minimize", () => {
-  // Show Desktop by minimizing all active system windows, but keep F.R.I.D.A.Y. HUD open!
-  const { exec } = require("child_process");
-  exec(`powershell -command "(New-Object -ComObject shell.application).minimizeall()"`, (err) => {
-    if (err) console.error("[FRIDAY] Show desktop command failed:", err);
-  });
+  // Close and quit the entire F.R.I.D.A.Y. AI system completely
+  app.quit();
 });
 
 // Relay execute request from renderer → backend
