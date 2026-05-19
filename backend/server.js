@@ -261,10 +261,13 @@ app.post("/ask", async (req, res) => {
 // POST /execute — execute command actions directly
 app.post("/execute", async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, deviceId } = req.body;
     if (!text) return res.status(400).json({ error: "text required" });
     
     const intent = parseIntent(text.trim());
+    intent.params = intent.params || {};
+    intent.params.deviceId = deviceId;
+    
     const result = await execute(intent);
     res.json({ text, intent, result });
   } catch (err) {
@@ -275,10 +278,13 @@ app.post("/execute", async (req, res) => {
 // POST /command — alternative direct execution route
 app.post("/command", async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, deviceId } = req.body;
     if (!text) return res.status(400).json({ error: "text required" });
     
     const intent = parseIntent(text.trim());
+    intent.params = intent.params || {};
+    intent.params.deviceId = deviceId;
+    
     const result = await execute(intent);
     res.json(result);
   } catch (err) {
@@ -289,10 +295,13 @@ app.post("/command", async (req, res) => {
 // POST /api/chat — compatibility core endpoint
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, deviceId } = req.body;
     if (!message) return res.status(400).json({ error: "message required" });
     
     const intent = parseIntent(message.trim());
+    intent.params = intent.params || {};
+    intent.params.deviceId = deviceId;
+    
     const result = await execute(intent);
     
     const responseText = result.message || JSON.stringify(result);
@@ -358,7 +367,7 @@ app.post("/api/launch-app", (req, res) => {
 // CONDITIONAL ROUTES — ONLY ACTIVE IF ENABLE_WHISPER = TRUE
 // ═══════════════════════════════════════════════════════════
 
-if (ENABLE_WHISPER) {
+if (true) {
   // POST /transcribe
   app.post("/transcribe", upload.single("audio"), async (req, res) => {
     let filePath = null;
@@ -428,6 +437,9 @@ if (ENABLE_WHISPER) {
       }
 
       const intent = parseIntent(text.trim());
+      intent.params = intent.params || {};
+      intent.params.deviceId = req.body.deviceId;
+      
       const result = await execute(intent);
       res.json({ text, confidence, intent, result });
 

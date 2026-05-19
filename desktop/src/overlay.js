@@ -436,6 +436,9 @@
 
     const formData = new FormData();
     formData.append('audio', audioBlob, 'recording.webm');
+    if (window.fridayDeviceId) {
+      formData.append('deviceId', window.fridayDeviceId);
+    }
 
     try {
       const res = await window.fridayFetch('transcribe', '/transcribe', {
@@ -575,7 +578,7 @@
       const res = await window.fridayFetch('command', '/execute', {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ text, deviceId: window.fridayDeviceId })
       });
       const d = await res.json();
       if (d && d.result) handleResult(d.result, d.intent);

@@ -47,7 +47,7 @@ async function execute(intentObj) {
         const playRes = await fetch(`${spotifyBase}/spotify/play`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uri: track.uri })
+          body: JSON.stringify({ uri: track.uri, device_id: intentObj.params.deviceId })
         });
         const playData = await playRes.json();
         if (playData.error) {
