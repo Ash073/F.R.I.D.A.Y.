@@ -88,9 +88,15 @@ export default function App() {
     synth.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = synth.getVoices();
-    const fridayVoice = voices.find(v => 
-      /female|woman|zira|hazel|susan|kate|moira|samantha|jenny|aria|sonia/i.test(v.name) && v.lang.startsWith('en')
-    ) || voices.find(v => v.lang.startsWith('en'));
+    const femaleVoice = voices.find(v => 
+      /female|woman|zira|hazel|susan|kate|moira|samantha|jenny|aria|sonia|heera/i.test(v.name) && 
+      v.lang.startsWith('en')
+    );
+    const fallbackVoice = voices.find(v => 
+      v.lang.startsWith('en') && 
+      !/\bmale\b|\bman\b|david|mark|george|james|ryan|guy|ravi/i.test(v.name)
+    );
+    const fridayVoice = femaleVoice || fallbackVoice || voices.find(v => v.lang.startsWith('en')) || voices[0];
     if (fridayVoice) utterance.voice = fridayVoice;
     utterance.pitch = 0.9;
     utterance.rate = 0.88;
@@ -166,6 +172,12 @@ export default function App() {
     setMessages(prev => [...prev, { role: 'user', text }]);
     const msg = result?.message || 'I didn\'t catch that. Try again.';
     setMessages(prev => [...prev, { role: 'assistant', text: msg }]);
+
+    // Trigger Electron virtual Spotify Window immediately if requested (voice pipeline support!)
+    if (result?.openSpotify && (window as any).friday && (window as any).friday.openSpotify) {
+      console.log("[FRIDAY React] Spawning Spotify Player window via voice event...");
+      (window as any).friday.openSpotify();
+    }
 
     // Update pending follow-up context
     if (result?.followUp) {
