@@ -58,7 +58,6 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, "../f.r.i.d.a.y.-ai (1)/dist/index.html"));
-  win.webContents.openDevTools({ mode: 'detach' });
 }
 
 app.whenReady().then(createWindow);
