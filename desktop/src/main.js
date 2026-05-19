@@ -63,7 +63,11 @@ app.whenReady().then(createWindow);
 app.on("window-all-closed", () => app.quit());
 
 ipcMain.on("friday:minimize", () => {
-  if (win) win.minimize();
+  // Show Desktop by minimizing all active system windows, but keep F.R.I.D.A.Y. HUD open!
+  const { exec } = require("child_process");
+  exec(`powershell -command "(New-Object -ComObject shell.application).minimizeall()"`, (err) => {
+    if (err) console.error("[FRIDAY] Show desktop command failed:", err);
+  });
 });
 
 // Relay execute request from renderer → backend
