@@ -438,7 +438,7 @@
     formData.append('audio', audioBlob, 'recording.webm');
 
     try {
-      const res = await fetch("https://f-r-i-d-a-y-8ixf.onrender.com/transcribe", {
+      const res = await window.fridayFetch('transcribe', '/transcribe', {
         method: "POST",
         body: formData
       });
@@ -572,14 +572,17 @@
   async function sendTextCommand(text) {
     try {
       if (pendingFollowUp) { clearFollowUpTimer(); handleFollowUpAnswer(text); return; }
-      const res = await fetch("https://f-r-i-d-a-y-8ixf.onrender.com/execute", {
+      const res = await window.fridayFetch('command', '/execute', {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text })
       });
       const d = await res.json();
       if (d && d.result) handleResult(d.result, d.intent);
-    } catch { speak('Backend is offline.'); }
+    } catch (err) {
+      console.error(err);
+      speak('Backend connection failed.');
+    }
   }
 
 
@@ -707,4 +710,87 @@
 
   document.getElementById('closeBtn').addEventListener('click', () => window.close());
 
+  // Check health of local Edge server on startup
+  if (window.checkLocalHealth) {
+    window.checkLocalHealth();
+  }
+
 })();
+
+// ═══════════════════════════════════════════════════════════
+// SPOTIFY PLAYBACK SDK INTEGRATION
+// ═══════════════════════════════════════════════════════════
+
+window.fridaySetStatus = function(trackName, artistName) {
+  const statusEl = document.getElementById('status');
+  if (statusEl) {
+    if (trackName && artistName) {
+      statusEl.textContent = `Now Playing: ${trackName} - ${artistName}`;
+    } else {
+      statusEl.textContent = 'Standing by...';
+    }
+  }
+};
+
+window.onSpotifyWebPlaybackSDKReady = () => {
+  console.log('[SPOTIFY SDK] Web Playback SDK is loaded and ready!');
+  
+  if (typeof Spotify === 'undefined') {
+    console.error('[SPOTIFY SDK] Spotify object not found on window.');
+    return;
+  }
+
+  const player = new Spotify.Player({
+    name: 'FRIDAY System',
+    getOAuthToken: async cb => {
+      try {
+        const res = await window.fridayFetch('spotify', '/spotify/token');
+        const data = await res.json();
+        if (data && data.token) {
+          cb(data.token);
+        } else {
+          console.error('[SPOTIFY SDK] Failed to get OAuth token from Cloud.');
+        }
+      } catch (err) {
+        console.error('[SPOTIFY SDK] Token fetch error:', err.message);
+      }
+    },
+    volume: 0.8
+  });
+
+  // Ready
+  player.addListener('ready', ({ device_id }) => {
+    console.log('[SPOTIFY SDK] ✓ Ready with Device ID:', device_id);
+    window.fridayDeviceId = device_id;
+    window.fridaySetStatus('Spotify Connected', 'FRIDAY System');
+  });
+
+  // Not Ready
+  player.addListener('not_ready', ({ device_id }) => {
+    console.warn('[SPOTIFY SDK] Device ID went offline:', device_id);
+    setTimeout(() => player.connect(), 3000);
+  });
+
+  // Player State Changed
+  player.addListener('player_state_changed', state => {
+    if (!state) return;
+    const currentTrack = state.track_window.current_track;
+    if (currentTrack) {
+      window.fridaySetStatus(currentTrack.name, currentTrack.artists.map(a => a.name).join(', '));
+    }
+  });
+
+  // Errors
+  player.addListener('initialization_error', ({ message }) => {
+    console.error('[SPOTIFY SDK] Initialization Error:', message);
+  });
+  player.addListener('authentication_error', ({ message }) => {
+    console.error('[SPOTIFY SDK] Authentication Error:', message);
+  });
+  player.addListener('account_error', ({ message }) => {
+    console.error('[SPOTIFY SDK] Account Error:', message);
+  });
+
+  player.connect();
+  window.fridayPlayer = player;
+};

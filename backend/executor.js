@@ -25,6 +25,76 @@ const FALLBACK = {
  * @returns {Promise<object>} - Result with { ok, message, type }
  */
 async function execute(intentObj) {
+  // ── SPOTIFY PATH ──────────────────────────────────────────
+  if (intentObj.intent === "SPOTIFY") {
+    console.log(`[FRIDAY] Routing Spotify Action: ${intentObj.params.action}`);
+    try {
+      const { action, query, direction } = intentObj.params;
+      
+      const PORT = process.env.PORT || 3131;
+      const CLOUD_URL = process.env.CLOUD_URL || 'https://f-r-i-d-a-y-8ixf.onrender.com';
+      const isCloud = process.env.RENDER || (process.env.PORT && process.env.PORT !== "3131" && process.env.PORT !== "8888");
+      const spotifyBase = isCloud ? `http://localhost:${PORT}` : CLOUD_URL;
+
+      if (action === 'spotify_play') {
+        const searchRes = await fetch(`${spotifyBase}/spotify/search?q=${encodeURIComponent(query)}`);
+        const tracks = await searchRes.json();
+        if (!tracks || tracks.length === 0 || tracks.error) {
+          return { ok: false, message: `I couldn't find "${query}" on Spotify.` };
+        }
+        const track = tracks[0];
+        
+        const playRes = await fetch(`${spotifyBase}/spotify/play`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uri: track.uri })
+        });
+        const playData = await playRes.json();
+        if (playData.error) {
+          return { ok: false, message: `Spotify error: ${playData.error}` };
+        }
+        return { ok: true, message: `Playing ${track.name} by ${track.artist}`, reply: `Playing ${track.name} by ${track.artist}` };
+      }
+
+      if (action === 'spotify_pause') {
+        await fetch(`${spotifyBase}/spotify/pause`, { method: 'POST' });
+        return { ok: true, message: 'Music paused.', reply: 'Music paused.' };
+      }
+
+      if (action === 'spotify_next') {
+        await fetch(`${spotifyBase}/spotify/next`, { method: 'POST' });
+        return { ok: true, message: 'Skipping track.', reply: 'Skipping track.' };
+      }
+
+      if (action === 'spotify_previous') {
+        await fetch(`${spotifyBase}/spotify/previous`, { method: 'POST' });
+        return { ok: true, message: 'Going back.', reply: 'Going back.' };
+      }
+
+      if (action === 'spotify_volume') {
+        const targetVol = direction === 'up' ? 80 : 30;
+        await fetch(`${spotifyBase}/spotify/volume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ volume_percent: targetVol })
+        });
+        return { ok: true, message: 'Volume adjusted.', reply: 'Volume adjusted.' };
+      }
+
+      if (action === 'spotify_current') {
+        const curRes = await fetch(`${spotifyBase}/spotify/current`);
+        const curData = await curRes.json();
+        if (curData && curData.trackName) {
+          return { ok: true, message: `Currently playing ${curData.trackName} by ${curData.artistName}`, reply: `Currently playing ${curData.trackName} by ${curData.artistName}` };
+        }
+        return { ok: true, message: 'Nothing is currently playing.', reply: 'Nothing is currently playing.' };
+      }
+    } catch (err) {
+      console.error("[SPOTIFY EXECUTION ERROR]", err);
+      return { ok: false, message: `Spotify command failed: ${err.message}` };
+    }
+  }
+
   // ── AI QUERY PATH ─────────────────────────────────────────
   if (intentObj.type === "query") {
     console.log(`[FRIDAY] Routing to AI: "${intentObj.raw}"`);
