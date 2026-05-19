@@ -137,7 +137,7 @@ export default function App() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const res = await fetch('http://localhost:3131/api/system-metrics');
+        const res = await fetch('https://f-r-i-d-a-y-8ixf.onrender.com/api/system-metrics');
         const m = await res.json();
         setSystemLoad(m.cpuPercent ?? 0);
         setCoreTemp(m.cpuTemp ?? 0);
@@ -212,7 +212,7 @@ export default function App() {
     setMessages(prev => [...prev, { role: 'user', text }]);
     setState('processing'); setStatus('PROCESSING_QUERY');
     try {
-      const res = await fetch('http://localhost:3131/api/chat', {
+      const res = await fetch('https://f-r-i-d-a-y-8ixf.onrender.com/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text })
       });

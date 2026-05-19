@@ -438,7 +438,7 @@
     formData.append('audio', audioBlob, 'recording.webm');
 
     try {
-      const res = await fetch("http://localhost:3131/transcribe", {
+      const res = await fetch("https://f-r-i-d-a-y-8ixf.onrender.com/transcribe", {
         method: "POST",
         body: formData
       });
@@ -528,7 +528,7 @@
     setStatus('Processing...');
 
     try {
-      const res = await fetch("http://localhost:3131/followup", {
+      const res = await fetch("https://f-r-i-d-a-y-8ixf.onrender.com/followup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ followUpContext: context, answer: answerText })
@@ -572,7 +572,7 @@
   async function sendTextCommand(text) {
     try {
       if (pendingFollowUp) { clearFollowUpTimer(); handleFollowUpAnswer(text); return; }
-      const res = await fetch("http://localhost:3131/execute", {
+      const res = await fetch("https://f-r-i-d-a-y-8ixf.onrender.com/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text })

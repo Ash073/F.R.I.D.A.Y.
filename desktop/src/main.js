@@ -68,7 +68,7 @@ ipcMain.on("friday:minimize", () => {
 
 // Relay execute request from renderer → backend
 ipcMain.handle("friday:execute", async (_e, text) => {
-  const res = await fetch("http://localhost:3131/execute", {
+  const res = await fetch("https://f-r-i-d-a-y-8ixf.onrender.com/execute", {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({ text }),
