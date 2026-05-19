@@ -1,0 +1,49 @@
+# Node.js dependencies
+node_modules/
+**/node_modules/
+
+# Local Environment Variables
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.*
+
+# Electron user data and profile caches
+**/electron_user_data/
+electron_user_data/
+
+# Build & Dist bundles
+dist/
+**/dist/
+build/
+**/build/
+out/
+**/out/
+
+# Audio and upload files
+uploads/
+**/uploads/
+*.webm
+*.wav
+*.mp3
+
+# Python caches and local files
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+ENV/
+
+# System and logs
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+*.log
+npm-debug.log*
+yarn-debug.log*

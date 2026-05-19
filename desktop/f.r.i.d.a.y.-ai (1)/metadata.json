@@ -1,0 +1,6 @@
+{
+  "name": "F.R.I.D.A.Y. AI",
+  "description": "A futuristic AI assistant with a holographic reactor core interface.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,32 @@
+# Environment variables (Crucial: Keep API keys local!)
+.env
+.env.local
+.env.*.local
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Temporary audio uploads
+uploads/
+
+# Python cache & compiler files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Operating system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*

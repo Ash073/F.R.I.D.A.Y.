@@ -1,0 +1,161 @@
+/* ═══════════════════════════════════════════════════════════
+   FRIDAY — CINEMATIC AI INTERFACE / STYLES
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --cyan:   #00f2ff;
+  --border: rgba(0, 242, 255, 0.2);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: transparent;
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  user-select: none;
+  -webkit-app-region: drag;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 20px;
+}
+
+.scanlines {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 999; opacity: 0.08;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 3px, rgba(0,0,0,0.15) 3px, rgba(0,0,0,0.15) 4px
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN BAR
+   ═══════════════════════════════════════════════════════════ */
+
+#bar {
+  width: 540px;
+  height: 64px;
+  background: rgba(20, 20, 22, 0.85);
+  backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  position: relative;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.7),
+    0 0 40px rgba(255, 100, 0, 0.1),
+    inset 0 1px 1px rgba(255, 255, 255, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ORB — Iron Man Theme
+   ═══════════════════════════════════════════════════════════ */
+
+#big-orb-container {
+  width: 160px;
+  height: 160px;
+  margin-bottom: 15px;
+  position: relative;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CENTER
+   ═══════════════════════════════════════════════════════════ */
+
+#center {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  margin: 0 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+#cmdInput {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-align: left;
+  caret-color: #ffaa00;
+  -webkit-app-region: no-drag;
+}
+#cmdInput::placeholder { color: rgba(255, 255, 255, 0.4); }
+
+#status {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: rgba(255, 150, 50, 0.8);
+  margin-top: 4px;
+  z-index: 5;
+  transition: opacity 0.3s ease;
+  height: 12px;
+  text-transform: uppercase;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CONTROLS
+   ═══════════════════════════════════════════════════════════ */
+
+#controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-right: 15px;
+  -webkit-app-region: no-drag;
+}
+
+#controls button {
+  background: transparent;
+  border: none;
+  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+#voiceBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+#voiceBtn:hover, #voiceBtn.active {
+  background: rgba(255, 150, 50, 0.2) !important;
+  color: #ffaa00 !important;
+  transform: scale(1.05);
+}
+
+#closeBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+#closeBtn:hover {
+  color: #ff4444 !important;
+  background: rgba(255, 50, 50, 0.1) !important;
+  transform: rotate(90deg);
+}

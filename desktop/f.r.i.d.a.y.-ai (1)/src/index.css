@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --font-anurati: "Anurati", sans-serif;
+  --font-orbitron: "Orbitron", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+body {
+  background-color: #0d0000;
+  color: #ff8c00;
+  font-family: var(--font-anurati), var(--font-orbitron);
+  overflow: hidden;
+}
+
+@layer utilities {
+  .glow-orange {
+    text-shadow: 0 0 10px rgba(255, 140, 0, 0.8), 0 0 20px rgba(255, 140, 0, 0.4);
+  }
+}
