@@ -5,7 +5,12 @@ const fs       = require("fs");
 const path     = require("path");
 const os       = require("os");
 const { execFile } = require("child_process");
+const { OpenAI } = require("openai");
 require("dotenv").config();
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 const { parseIntent, stripWakeWords } = require("./intentParser");
 const { execute }     = require("./executor");
@@ -77,16 +82,27 @@ function startWhisperDaemon() {
     }
   });
 
-  whisperProcess.on("close", (code) => {
-    console.error(`[WHISPER DAEMON] Process exited with code ${code}. Restarting daemon...`);
+  whisperProcess.on("error", (err) => {
+    console.error("[WHISPER DAEMON] ✗ Failed to start Python process (Python may not be installed):", err.message);
     whisperReady = false;
+    whisperProcess = null;
+  });
+
+  whisperProcess.on("close", (code) => {
+    console.error(`[WHISPER DAEMON] Process exited with code ${code}.`);
+    whisperReady = false;
+    
     // Reject any outstanding requests
     const oldPending = pendingTranscriptions;
     pendingTranscriptions = [];
     oldPending.forEach(p => p.resolve({ text: "", confidence: 0.0, error: "Process terminated unexpectedly" }));
     
-    // Automatically restart after 2 seconds
-    setTimeout(startWhisperDaemon, 2000);
+    // Only restart if the process was actually running previously and exited unexpectedly
+    if (whisperProcess) {
+      console.log("[WHISPER DAEMON] Restarting daemon in 5 seconds...");
+      whisperProcess = null;
+      setTimeout(startWhisperDaemon, 5000);
+    }
   });
 }
 
@@ -127,6 +143,41 @@ function localWhisper(audioPath) {
       // If process crashed or is not loaded yet, wait or it will process when ready
     }
   });
+}
+
+/**
+ * Transcribe audio using OpenAI remote Whisper API.
+ */
+async function remoteWhisper(audioPath) {
+  console.log(`[WHISPER] Querying remote OpenAI Whisper API for: ${audioPath}`);
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is not configured in environment variables");
+    }
+    const response = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(audioPath),
+      model: "whisper-1",
+    });
+    return { text: response.text, confidence: 1.0 };
+  } catch (err) {
+    console.error("[WHISPER] Remote transcription failed:", err?.message || err);
+    return { text: "", confidence: 0.0, error: err?.message || err };
+  }
+}
+
+/**
+ * Intelligent hybrid audio transcriber.
+ * Falls back to remote OpenAI Whisper if local daemon is not ready or if running in cloud production.
+ */
+async function transcribeAudio(audioPath) {
+  const isOnRender = process.env.RENDER || (process.env.PORT && process.env.PORT !== "3131");
+  
+  if (isOnRender || !whisperReady) {
+    console.log(`[WHISPER] Routing to REMOTE OpenAI Whisper API (Reason: ${isOnRender ? "Running on Render" : "Local Whisper daemon not ready/installed"})`);
+    return await remoteWhisper(audioPath);
+  }
+  
+  return await localWhisper(audioPath);
 }
 
 
@@ -197,8 +248,8 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
     const fileSize = fs.statSync(filePath).size;
     console.log(`[FRIDAY] Audio received: ${filePath} (${fileSize} bytes)`);
 
-    // ── STEP 1: LOCAL WHISPER TRANSCRIPTION ──
-    const whisperResult = await localWhisper(filePath);
+    // ── STEP 1: HYBRID WHISPER TRANSCRIPTION ──
+    const whisperResult = await transcribeAudio(filePath);
     const text = whisperResult.text || "";
     const confidence = whisperResult.confidence ?? 1.0;
 
