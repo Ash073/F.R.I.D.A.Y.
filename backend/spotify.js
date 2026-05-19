@@ -68,6 +68,15 @@ setInterval(() => {
 
 // ── ROUTE HANDLERS ──
 
+// Debug endpoint to safely inspect env configurations on Render
+router.get("/debug", (req, res) => {
+  const { clientId, redirectUri } = getSpotifyCreds();
+  res.json({
+    clientId: clientId ? `${clientId.substring(0, 5)}...` : "missing",
+    redirectUri: redirectUri || "missing"
+  });
+});
+
 // 1. Redirect to Spotify Authorization
 router.get("/login", (req, res) => {
   const { clientId, redirectUri } = getSpotifyCreds();
