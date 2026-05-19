@@ -305,7 +305,7 @@ app.post("/api/chat", async (req, res) => {
     const result = await execute(intent);
     
     const responseText = result.message || JSON.stringify(result);
-    res.json({ text: responseText });
+    res.json({ text: responseText, intent, result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

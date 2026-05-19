@@ -217,20 +217,44 @@ export default function App() {
     else if (voiceState === 'idle' && (state === 'listening' || state === 'processing') && state !== 'speaking') { setState('idle'); setStatus('STANDING_BY'); }
   }, [voiceState]);
 
-  // ── TYPED TEXT INPUT — only path that uses /api/chat ──
+  // ── TYPED TEXT INPUT — uses /api/chat with full intent + action execution ──
   const handleSend = useCallback(async (text: string) => {
     if (!text.trim()) return;
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text }]);
     setState('processing'); setStatus('PROCESSING_QUERY');
     try {
-      const res = await fetch('https://f-r-i-d-a-y-8ixf.onrender.com/api/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text })
-      });
+      const res = (window as any).friday && (window as any).friday.fridayFetch
+        ? await (window as any).friday.fridayFetch('command', '/api/chat', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+          })
+        : (window as any).fridayFetch
+        ? await (window as any).fridayFetch('command', '/api/chat', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+          })
+        : await fetch('https://f-r-i-d-a-y-8ixf.onrender.com/api/chat', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+          });
       const data = await res.json();
       if (data.text) {
         setMessages(prev => [...prev, { role: 'assistant', text: data.text }]);
+        
+        // Trigger Electron virtual Spotify Window immediately if requested (typed command support!)
+        if (data.result?.openSpotify && (window as any).friday && (window as any).friday.openSpotify) {
+          console.log("[FRIDAY React] Spawning Spotify Player window via text event...");
+          (window as any).friday.openSpotify();
+        }
+
+        // Update pending follow-up context
+        if (data.result?.followUp) {
+          setPendingFollowUp(data.result.followUp);
+        } else {
+          setPendingFollowUp(null);
+        }
+
         speakAndIdle(data.text);
       } else { throw new Error('No response'); }
     } catch (err) { console.error(err); setStatus('ERROR'); setState('idle'); }

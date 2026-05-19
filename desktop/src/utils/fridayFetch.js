@@ -4,7 +4,7 @@
  */
 
 let LOCAL = 'http://localhost:3131'; // Defaults to 3131, dynamically scans 8888 too
-const CLOUD = window.FRIDAY_CLOUD_URL || 'https://f-r-i-d-a-y-8ixf.onrender.com';
+const CLOUD = (typeof window !== 'undefined' && window.FRIDAY_CLOUD_URL) || 'https://f-r-i-d-a-y-8ixf.onrender.com';
 const cloudOnlyFeatures = ['spotify', 'mobile'];
 
 /**
@@ -67,7 +67,9 @@ async function checkLocalHealth() {
       const data = await response.json();
       if (data && data.status === 'ok') {
         LOCAL = testUrl;
-        window.FRIDAY_LOCAL_ONLINE = true;
+        if (typeof window !== 'undefined') {
+          window.FRIDAY_LOCAL_ONLINE = true;
+        }
         console.log(`[FRIDAY-HEALTH] Dynamic local edge detected ONLINE on port ${port}!`);
         return true;
       }
@@ -77,14 +79,18 @@ async function checkLocalHealth() {
   }
   
   // If offline on both, default back to 3131 but flag local as offline
-  window.FRIDAY_LOCAL_ONLINE = false;
+  if (typeof window !== 'undefined') {
+    window.FRIDAY_LOCAL_ONLINE = false;
+  }
   console.warn(`[FRIDAY-HEALTH] Local Edge is OFFLINE (checked 3131 and 8888)`);
   return false;
 }
 
 // Bind to window for global script accessibility in desktop overlay
-window.fridayFetch = fridayFetch;
-window.checkLocalHealth = checkLocalHealth;
+if (typeof window !== 'undefined') {
+  window.fridayFetch = fridayFetch;
+  window.checkLocalHealth = checkLocalHealth;
+}
 
 // Export for ESM systems (Vite dashboard components)
 if (typeof module !== 'undefined' && module.exports) {
