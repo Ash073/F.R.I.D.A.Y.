@@ -179,3 +179,29 @@ ipcMain.handle("friday:get-custom-apps", async () => {
   return [];
 });
 
+let spotifyWindow = null;
+ipcMain.on("friday:open-spotify", () => {
+  if (spotifyWindow && !spotifyWindow.isDestroyed()) {
+    spotifyWindow.show();
+    spotifyWindow.focus();
+    return;
+  }
+
+  spotifyWindow = new BrowserWindow({
+    width: 900,
+    height: 650,
+    title: "Spotify - F.R.I.D.A.Y. Player",
+    autoHideMenuBar: true,
+    alwaysOnTop: true,
+    webPreferences: {
+      partition: "persist:spotify_session" // Persists Spotify logins!
+    }
+  });
+
+  spotifyWindow.loadURL("https://open.spotify.com");
+
+  spotifyWindow.on("closed", () => {
+    spotifyWindow = null;
+  });
+});
+

@@ -39,7 +39,13 @@ async function execute(intentObj) {
       if (action === 'spotify_play') {
         const searchRes = await fetch(`${spotifyBase}/spotify/search?q=${encodeURIComponent(query)}`);
         const tracks = await searchRes.json();
-        if (!tracks || tracks.length === 0 || tracks.error) {
+        if (tracks && tracks.error) {
+          if (tracks.error.toLowerCase().includes("unauthorized") || tracks.error.toLowerCase().includes("auth")) {
+            return { ok: false, message: `I'm not connected to Spotify yet, Boss. Please authorize Spotify by visiting: ${spotifyBase.replace('localhost', '127.0.0.1')}/spotify/login` };
+          }
+          return { ok: false, message: `Spotify search error: ${tracks.error}` };
+        }
+        if (!tracks || tracks.length === 0) {
           return { ok: false, message: `I couldn't find "${query}" on Spotify.` };
         }
         const track = tracks[0];

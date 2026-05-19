@@ -1,11 +1,9 @@
-// c:\Users\Sayyed Ashif\Downloads\FRIDAY\friday\desktop\src\utils\fridayFetch.js
 /**
  * F.R.I.D.A.Y. Hybrid Smart Routing Fetch Utility
  * Dual-route client pipeline with automatic failure recovery fallbacks.
  */
 
-const LOCAL = 'http://localhost:8888';
-// Read from configured environment variable, custom window tags, or the Render production endpoint
+let LOCAL = 'http://localhost:3131'; // Defaults to 3131, dynamically scans 8888 too
 const CLOUD = window.FRIDAY_CLOUD_URL || 'https://f-r-i-d-a-y-8ixf.onrender.com';
 const cloudOnlyFeatures = ['spotify', 'mobile'];
 
@@ -47,10 +45,10 @@ async function fridayFetch(feature, path, options = {}) {
     const url = `${LOCAL}${targetPath}`;
     console.log(`[FRIDAY-ROUTER] Routing local (2s limit): ${url}`);
     const response = await fetchWithTimeout(url, options, 2000);
-    console.log(`[FRIDAY-ROUTER] ✓ Local backend responded successfully.`);
+    console.log(`[FRIDAY-ROUTER] ✓ Local backend responded successfully on ${LOCAL}.`);
     return response;
   } catch (err) {
-    console.warn(`[FRIDAY-ROUTER] Local backend unavailable or timed out. Falling back to CLOUD...`, err.message);
+    console.warn(`[FRIDAY-ROUTER] Local backend unavailable on ${LOCAL}. Falling back to CLOUD...`, err.message);
     const url = `${CLOUD}${targetPath}`;
     console.log(`[FRIDAY-ROUTER] Fallback cloud routing: ${url}`);
     return await fetch(url, options);
@@ -58,21 +56,30 @@ async function fridayFetch(feature, path, options = {}) {
 }
 
 /**
- * Verifies local server edge state status
+ * Verifies local server edge state status with dynamic port discovery (scans 3131 & 8888)
  */
 async function checkLocalHealth() {
-  try {
-    const response = await fetchWithTimeout(`${LOCAL}/health`, { method: 'GET' }, 1500);
-    const data = await response.json();
-    const isOnline = data && data.status === 'ok';
-    window.FRIDAY_LOCAL_ONLINE = isOnline;
-    console.log(`[FRIDAY-HEALTH] Local Edge Status: ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
-    return isOnline;
-  } catch (err) {
-    window.FRIDAY_LOCAL_ONLINE = false;
-    console.warn(`[FRIDAY-HEALTH] Local Edge Edge is OFFLINE:`, err.message);
-    return false;
+  const ports = ['3131', '8888'];
+  for (const port of ports) {
+    const testUrl = `http://localhost:${port}`;
+    try {
+      const response = await fetchWithTimeout(`${testUrl}/health`, { method: 'GET' }, 1000);
+      const data = await response.json();
+      if (data && data.status === 'ok') {
+        LOCAL = testUrl;
+        window.FRIDAY_LOCAL_ONLINE = true;
+        console.log(`[FRIDAY-HEALTH] Dynamic local edge detected ONLINE on port ${port}!`);
+        return true;
+      }
+    } catch (err) {
+      // Continue to next port
+    }
   }
+  
+  // If offline on both, default back to 3131 but flag local as offline
+  window.FRIDAY_LOCAL_ONLINE = false;
+  console.warn(`[FRIDAY-HEALTH] Local Edge is OFFLINE (checked 3131 and 8888)`);
+  return false;
 }
 
 // Bind to window for global script accessibility in desktop overlay

@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld("friday", {
   getAppIcon: (path) => ipcRenderer.invoke("friday:get-app-icon", path),
   saveCustomApps: (apps) => ipcRenderer.invoke("friday:save-custom-apps", apps),
   getCustomApps: () => ipcRenderer.invoke("friday:get-custom-apps"),
+  openSpotify: () => ipcRenderer.send("friday:open-spotify"),
 });

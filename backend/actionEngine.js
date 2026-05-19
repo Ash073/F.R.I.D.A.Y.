@@ -88,8 +88,7 @@ const APP_FOLLOW_UPS = {
     handler: async (answer) => {
       const a = answer.toLowerCase().trim();
       if (a === "skip" || a === "no" || a === "just open it" || a === "nothing") {
-        await shellExec("start spotify:");
-        return { ok: true, message: "Opening Spotify." };
+        return { ok: true, message: "Opening Spotify on F.R.I.D.A.Y.", openSpotify: true };
       }
       // Open Spotify search
       const url = `https://open.spotify.com/search/${encodeURIComponent(answer.trim())}`;
@@ -168,6 +167,9 @@ async function handleOpenApp({ app }) {
 
     // No follow-up — just open it
     console.log(`[FRIDAY] OPEN_APP → ${a.name} (cmd: ${a.cmd})`);
+    if (appKey === "spotify") {
+      return { ok: true, message: "Opening Spotify on F.R.I.D.A.Y.", openSpotify: true };
+    }
     const success = await shellExec(a.cmd);
     if (success) {
       return { ok: true, message: `Opening ${a.name}.` };

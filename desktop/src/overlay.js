@@ -513,6 +513,10 @@
     // Clear input now that we have a final result
     cmdInput.value = '';
 
+    if (result.openSpotify && window.friday && window.friday.openSpotify) {
+      window.friday.openSpotify();
+    }
+
     if (type === 'command') {
       setStatus('Executing...');
       setState('executing');
