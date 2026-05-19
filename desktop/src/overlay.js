@@ -719,6 +719,12 @@
     try { if (orbIframe && orbIframe.contentWindow) orbIframe.contentWindow.postMessage({ type: 'setState', value: state }, '*'); } catch (e) { }
   }
   function setStatus(t) { statusEl.style.opacity = '0'; setTimeout(() => { statusEl.textContent = t; statusEl.style.opacity = '1'; }, 300); }
+
+  // Expose global HUD hooks for Spotify widget and modules
+  window.fridaySetState = (s) => setState(s);
+  window.fridaySetStatus = (t1, t2) => setStatus(t2 ? `${t1} - ${t2}` : t1);
+  window.fridayAmplitude = 0;
+
   function clearBars() { for (let b = 0; b < BAR_COUNT; b++) barT[b] = 0; }
 
   orbZone.addEventListener('click', () => { if (state === 'idle') { manualActivation = true; startRecording(); } else if (state === 'listening') stopRecording(); });
@@ -743,79 +749,44 @@
 })();
 
 // ═══════════════════════════════════════════════════════════
-// SPOTIFY PLAYBACK SDK INTEGRATION
+// SPOTIFY MINI-PLAYER WIDGET INTEGRATION
 // ═══════════════════════════════════════════════════════════
 
-window.fridaySetStatus = function(trackName, artistName) {
-  const statusEl = document.getElementById('status');
-  if (statusEl) {
-    if (trackName && artistName) {
-      statusEl.textContent = `Now Playing: ${trackName} - ${artistName}`;
-    } else {
-      statusEl.textContent = 'Standing by...';
-    }
-  }
-};
+let initSpotifyPlayer, spotifyCommand;
 
-window.onSpotifyWebPlaybackSDKReady = () => {
-  console.log('[SPOTIFY SDK] Web Playback SDK is loaded and ready!');
-  
-  if (typeof Spotify === 'undefined') {
-    console.error('[SPOTIFY SDK] Spotify object not found on window.');
-    return;
+// Dynamically import the Spotify Player utility
+import('./utils/spotifyPlayer.js').then(module => {
+  initSpotifyPlayer = module.initSpotifyPlayer;
+  spotifyCommand = module.spotifyCommand;
+
+  // Initialize once DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => initSpotifyPlayer());
+  } else {
+    initSpotifyPlayer();
   }
 
-  const player = new Spotify.Player({
-    name: 'FRIDAY System',
-    getOAuthToken: async cb => {
-      try {
-        const res = await window.fridayFetch('spotify', '/spotify/token');
-        const data = await res.json();
-        if (data && data.token) {
-          cb(data.token);
-        } else {
-          console.error('[SPOTIFY SDK] Failed to get OAuth token from Cloud.');
-        }
-      } catch (err) {
-        console.error('[SPOTIFY SDK] Token fetch error:', err.message);
+  // Wire control button listeners
+  const prevBtn = document.getElementById('sp-prev');
+  const playPauseBtn = document.getElementById('sp-play-pause');
+  const nextBtn = document.getElementById('sp-next');
+
+  if (prevBtn) prevBtn.onclick = () => spotifyCommand('previous');
+  if (playPauseBtn) playPauseBtn.onclick = () => window.fridayPlayer?.togglePlay();
+  if (nextBtn) nextBtn.onclick = () => spotifyCommand('next');
+
+  // Expose global play command
+  window.fridaySpotifyPlay = async (query) => {
+    const results = await spotifyCommand('search', { query });
+    if (!results || !results.length) {
+      if (typeof window.fridaySetStatus === 'function') {
+        window.fridaySetStatus('NOT FOUND', query);
       }
-    },
-    volume: 0.8
-  });
-
-  // Ready
-  player.addListener('ready', ({ device_id }) => {
-    console.log('[SPOTIFY SDK] ✓ Ready with Device ID:', device_id);
-    window.fridayDeviceId = device_id;
-    window.fridaySetStatus('Spotify Connected', 'FRIDAY System');
-  });
-
-  // Not Ready
-  player.addListener('not_ready', ({ device_id }) => {
-    console.warn('[SPOTIFY SDK] Device ID went offline:', device_id);
-    setTimeout(() => player.connect(), 3000);
-  });
-
-  // Player State Changed
-  player.addListener('player_state_changed', state => {
-    if (!state) return;
-    const currentTrack = state.track_window.current_track;
-    if (currentTrack) {
-      window.fridaySetStatus(currentTrack.name, currentTrack.artists.map(a => a.name).join(', '));
+      return;
     }
-  });
-
-  // Errors
-  player.addListener('initialization_error', ({ message }) => {
-    console.error('[SPOTIFY SDK] Initialization Error:', message);
-  });
-  player.addListener('authentication_error', ({ message }) => {
-    console.error('[SPOTIFY SDK] Authentication Error:', message);
-  });
-  player.addListener('account_error', ({ message }) => {
-    console.error('[SPOTIFY SDK] Account Error:', message);
-  });
-
-  player.connect();
-  window.fridayPlayer = player;
-};
+    const track = results[0];
+    await spotifyCommand('play', { uri: track.uri });
+  };
+}).catch(err => {
+  console.error('[FRIDAY Spotify] Failed to load Spotify Player module:', err);
+});

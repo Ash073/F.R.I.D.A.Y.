@@ -11,12 +11,12 @@
 const COMMAND_PATTERNS = [
   // ── SPOTIFY INTENTS ──
   { pattern: /^play\s+(.+)/i,                               intent: "SPOTIFY",    extract: m => ({ action: 'spotify_play', query: m[1].trim() }) },
-  { pattern: /^(?:pause|stop)\s+music/i,                    intent: "SPOTIFY",    extract: () => ({ action: 'spotify_pause' }) },
-  { pattern: /^(?:next\s+song|skip)/i,                       intent: "SPOTIFY",    extract: () => ({ action: 'spotify_next' }) },
-  { pattern: /^(?:previous\s+song|go\s+back)/i,             intent: "SPOTIFY",    extract: () => ({ action: 'spotify_previous' }) },
-  { pattern: /^(?:volume\s+up|louder)/i,                    intent: "SPOTIFY",    extract: () => ({ action: 'spotify_volume', direction: 'up' }) },
-  { pattern: /^(?:volume\s+down|quieter)/i,                  intent: "SPOTIFY",    extract: () => ({ action: 'spotify_volume', direction: 'down' }) },
-  { pattern: /^(?:what's\s+playing|current\s+song)/i,        intent: "SPOTIFY",    extract: () => ({ action: 'spotify_current' }) },
+  { pattern: /^(?:pause|stop\s+music|stop)$/i,              intent: "SPOTIFY",    extract: () => ({ action: 'spotify_pause' }) },
+  { pattern: /^(?:next|skip)$/i,                            intent: "SPOTIFY",    extract: () => ({ action: 'spotify_next' }) },
+  { pattern: /^(?:previous|go\s+back)$/i,                   intent: "SPOTIFY",    extract: () => ({ action: 'spotify_previous' }) },
+  { pattern: /^(?:volume\s+up|louder)$/i,                   intent: "SPOTIFY",    extract: () => ({ action: 'spotify_volume', direction: 'up' }) },
+  { pattern: /^(?:volume\s+down|quieter)$/i,                 intent: "SPOTIFY",    extract: () => ({ action: 'spotify_volume', direction: 'down' }) },
+  { pattern: /^(?:what's\s+playing|current\s+song|what\s+song\s+is\s+this)$/i, intent: "SPOTIFY", extract: () => ({ action: 'spotify_current' }) },
 
   { pattern: /^(?:open|launch|start|run)\s+(.+)/i,          intent: "OPEN_APP",   extract: m => ({ app: m[1].trim() }) },
   { pattern: /^(?:close|quit|exit|kill)\s+(.+)/i,           intent: "CLOSE_APP",  extract: m => ({ app: m[1].trim() }) },

@@ -26,74 +26,111 @@ const FALLBACK = {
  */
 async function execute(intentObj) {
   // ── SPOTIFY PATH ──────────────────────────────────────────
-  if (intentObj.intent === "SPOTIFY") {
-    console.log(`[FRIDAY] Routing Spotify Action: ${intentObj.params.action}`);
+  if (intentObj.intent === "SPOTIFY" || intentObj.intent.startsWith("spotify")) {
+    const action = intentObj.params?.action || intentObj.intent;
+    const query = intentObj.params?.query || intentObj.query || intentObj.params?.q || intentObj.q;
+    const direction = intentObj.params?.direction || intentObj.direction;
+
+    console.log(`[FRIDAY] Routing Spotify Action: ${action}`);
     try {
-      const { action, query, direction } = intentObj.params;
-      
+      // 1. Direct browser-side window context support (if executed in a frontend webview or shared Electron context)
+      if (typeof window !== 'undefined') {
+        switch (action) {
+          case 'spotify_play':
+            if (typeof window.fridaySpotifyPlay === 'function') {
+              await window.fridaySpotifyPlay(query);
+            }
+            return { ok: true, reply: `Searching for ${query} on Spotify.`, message: `Searching for ${query} on Spotify.` };
+
+          case 'spotify_pause':
+            if (window.fridayPlayer) {
+              await window.fridayPlayer.pause();
+            } else if (typeof window.spotifyCommand === 'function') {
+              await window.spotifyCommand('pause');
+            }
+            return { ok: true, reply: 'Music paused.', message: 'Music paused.' };
+
+          case 'spotify_next':
+            if (typeof window.spotifyCommand === 'function') {
+              await window.spotifyCommand('next');
+            }
+            return { ok: true, reply: 'Next track.', message: 'Next track.' };
+
+          case 'spotify_previous':
+            if (typeof window.spotifyCommand === 'function') {
+              await window.spotifyCommand('previous');
+            }
+            return { ok: true, reply: 'Previous track.', message: 'Previous track.' };
+
+          case 'spotify_volume':
+            const vol = direction === 'up' ? 80 : 30;
+            if (typeof window.spotifyCommand === 'function') {
+              await window.spotifyCommand('volume', { volume_percent: vol });
+            }
+            return { ok: true, reply: `Volume ${direction}.`, message: `Volume ${direction}.` };
+        }
+      }
+
+      // 2. Standard robust Node/Express server backend fallback proxy
       const PORT = process.env.PORT || 3131;
       const CLOUD_URL = process.env.CLOUD_URL || 'https://f-r-i-d-a-y-8ixf.onrender.com';
       const isCloud = process.env.RENDER || (process.env.PORT && process.env.PORT !== "3131" && process.env.PORT !== "8888");
       const spotifyBase = isCloud ? `http://localhost:${PORT}` : CLOUD_URL;
 
-      if (action === 'spotify_play') {
-        const searchRes = await fetch(`${spotifyBase}/spotify/search?q=${encodeURIComponent(query)}`);
-        const tracks = await searchRes.json();
-        if (tracks && tracks.error) {
-          if (tracks.error.toLowerCase().includes("unauthorized") || tracks.error.toLowerCase().includes("auth")) {
-            return { ok: false, message: `I'm not connected to Spotify yet, Boss. Please authorize Spotify by visiting: ${CLOUD_URL}/spotify/login` };
+      switch (action) {
+        case 'spotify_play':
+          const searchRes = await fetch(`${spotifyBase}/spotify/search?q=${encodeURIComponent(query)}`);
+          const tracks = await searchRes.json();
+          if (tracks && tracks.error) {
+            if (tracks.error.toLowerCase().includes("unauthorized") || tracks.error.toLowerCase().includes("auth")) {
+              return { ok: false, message: `I'm not connected to Spotify yet, Boss. Please authorize Spotify by visiting: ${CLOUD_URL}/spotify/login` };
+            }
+            return { ok: false, message: `Spotify search error: ${tracks.error}` };
           }
-          return { ok: false, message: `Spotify search error: ${tracks.error}` };
-        }
-        if (!tracks || tracks.length === 0) {
-          return { ok: false, message: `I couldn't find "${query}" on Spotify.` };
-        }
-        const track = tracks[0];
-        
-        const playRes = await fetch(`${spotifyBase}/spotify/play`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uri: track.uri, device_id: intentObj.params.deviceId })
-        });
-        const playData = await playRes.json();
-        if (playData.error) {
-          return { ok: false, message: `Spotify error: ${playData.error}` };
-        }
-        return { ok: true, message: `Playing ${track.name} by ${track.artist}`, reply: `Playing ${track.name} by ${track.artist}` };
-      }
+          if (!tracks || tracks.length === 0) {
+            return { ok: false, message: `I couldn't find "${query}" on Spotify.` };
+          }
+          const track = tracks[0];
+          
+          const playRes = await fetch(`${spotifyBase}/spotify/play`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uri: track.uri, device_id: intentObj.params?.deviceId })
+          });
+          const playData = await playRes.json();
+          if (playData.error) {
+            return { ok: false, message: `Spotify error: ${playData.error}` };
+          }
+          return { ok: true, message: `Playing ${track.name} by ${track.artist}`, reply: `Searching for ${query} on Spotify.` };
 
-      if (action === 'spotify_pause') {
-        await fetch(`${spotifyBase}/spotify/pause`, { method: 'POST' });
-        return { ok: true, message: 'Music paused.', reply: 'Music paused.' };
-      }
+        case 'spotify_pause':
+          await fetch(`${spotifyBase}/spotify/pause`, { method: 'POST' });
+          return { ok: true, message: 'Music paused.', reply: 'Music paused.' };
 
-      if (action === 'spotify_next') {
-        await fetch(`${spotifyBase}/spotify/next`, { method: 'POST' });
-        return { ok: true, message: 'Skipping track.', reply: 'Skipping track.' };
-      }
+        case 'spotify_next':
+          await fetch(`${spotifyBase}/spotify/next`, { method: 'POST' });
+          return { ok: true, message: 'Next track.', reply: 'Next track.' };
 
-      if (action === 'spotify_previous') {
-        await fetch(`${spotifyBase}/spotify/previous`, { method: 'POST' });
-        return { ok: true, message: 'Going back.', reply: 'Going back.' };
-      }
+        case 'spotify_previous':
+          await fetch(`${spotifyBase}/spotify/previous`, { method: 'POST' });
+          return { ok: true, message: 'Previous track.', reply: 'Previous track.' };
 
-      if (action === 'spotify_volume') {
-        const targetVol = direction === 'up' ? 80 : 30;
-        await fetch(`${spotifyBase}/spotify/volume`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ volume_percent: targetVol })
-        });
-        return { ok: true, message: 'Volume adjusted.', reply: 'Volume adjusted.' };
-      }
+        case 'spotify_volume':
+          const targetVol = direction === 'up' ? 80 : 30;
+          await fetch(`${spotifyBase}/spotify/volume`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ volume_percent: targetVol })
+          });
+          return { ok: true, message: `Volume ${direction}.`, reply: `Volume ${direction}.` };
 
-      if (action === 'spotify_current') {
-        const curRes = await fetch(`${spotifyBase}/spotify/current`);
-        const curData = await curRes.json();
-        if (curData && curData.trackName) {
-          return { ok: true, message: `Currently playing ${curData.trackName} by ${curData.artistName}`, reply: `Currently playing ${curData.trackName} by ${curData.artistName}` };
-        }
-        return { ok: true, message: 'Nothing is currently playing.', reply: 'Nothing is currently playing.' };
+        case 'spotify_current':
+          const curRes = await fetch(`${spotifyBase}/spotify/current`);
+          const curData = await curRes.json();
+          if (curData && curData.trackName) {
+            return { ok: true, message: `Currently playing ${curData.trackName} by ${curData.artistName}`, reply: `Currently playing ${curData.trackName} by ${curData.artistName}` };
+          }
+          return { ok: true, message: 'Nothing is currently playing.', reply: 'Nothing is currently playing.' };
       }
     } catch (err) {
       console.error("[SPOTIFY EXECUTION ERROR]", err);

@@ -147,15 +147,158 @@ body {
   transform: scale(1.05);
 }
 
-#closeBtn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  color: rgba(255, 255, 255, 0.4) !important;
-}
-
 #closeBtn:hover {
   color: #ff4444 !important;
   background: rgba(255, 50, 50, 0.1) !important;
   transform: rotate(90deg);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SPOTIFY MINI-PLAYER WIDGET
+   ═══════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&display=swap');
+
+#spotify-widget {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 300px;
+  background: linear-gradient(135deg, #0d0000ee, #1a0500ee);
+  border: 0.5px solid #ff6a0044;
+  border-radius: 4px;
+  padding: 12px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 0 24px #ff6a0022, inset 0 0 12px #ff000008;
+  font-family: 'Orbitron', monospace;
+  z-index: 9999;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+#spotify-widget.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: all;
+}
+
+.sp-top-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.sp-icon {
+  fill: #1DB954;
+  filter: drop-shadow(0 0 2px rgba(29, 185, 84, 0.5));
+}
+
+.sp-title {
+  color: #ff6a00;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-shadow: 0 0 6px rgba(255, 106, 0, 0.4);
+}
+
+.sp-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+#sp-album-art {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border: 1px solid #ff6a0044;
+  box-shadow: 0 0 8px #ff6a0022;
+  border-radius: 2px;
+  background: #000;
+}
+
+.sp-info {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+#sp-track-name {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
+}
+
+#sp-artist-name {
+  color: #ff6a0099;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-progress-bar {
+  width: 100%;
+  height: 2px;
+  background: #ff6a0022;
+  margin: 8px 0;
+  position: relative;
+  border-radius: 1px;
+}
+
+.sp-progress-fill {
+  height: 100%;
+  background: #ff6a00;
+  width: 0%;
+  transition: width 0.5s linear;
+  box-shadow: 0 0 6px #ff6a00;
+  border-radius: 1px;
+}
+
+.sp-controls {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 8px;
+}
+
+.sp-controls button {
+  background: none;
+  border: none;
+  color: #ff6a00;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 10px;
+  transition: color 0.2s, transform 0.1s;
+  outline: none;
+}
+
+.sp-controls button:hover {
+  color: #ffaa00;
+  transform: scale(1.1);
+}
+
+.sp-controls button:active {
+  transform: scale(0.95);
+}
+
+.sp-footer {
+  text-align: center;
+  font-size: 8px;
+  color: #ff6a0033;
+  letter-spacing: 0.2em;
+  margin-top: 8px;
+  font-weight: 700;
 }
