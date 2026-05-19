@@ -312,18 +312,38 @@ export default function QuickAccessTray({ accentColor = '#ff8c00' }: { accentCol
                             Quick_Access
                         </span>
                         
+                        {/* Static Home Button (Minimize OS) — Rendered OUTSIDE of Reorder.Group to avoid drag events hijacking click handlers! */}
+                        {apps.length > 0 && apps[0].id === 'home' && (
+                            <div className="group relative">
+                                <div 
+                                    className="p-2 md:p-3 rounded-xl border border-transparent transition-all cursor-pointer hover:border-white/10 flex items-center justify-center pointer-events-auto animate-pulse-subtle" 
+                                    style={{ backgroundColor: accentColor + '0d' }}
+                                    onClick={() => apps[0].action && apps[0].action()}
+                                >
+                                    {(() => {
+                                        const HomeIcon = apps[0].icon;
+                                        return <HomeIcon size={16} className="md:size-4.5 transition-colors" style={{ color: accentColor + '99' }} />;
+                                    })()}
+                                </div>
+                                
+                                {/* Label Tooltip */}
+                                <div className="hidden md:block absolute left-16 top-1/2 -translate-y-1/2 px-2 py-1 text-black text-[8px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap uppercase tracking-tighter font-mono" style={{ backgroundColor: accentColor }}>
+                                    {apps[0].label}
+                                </div>
+                            </div>
+                        )}
+
                         <Reorder.Group 
                             axis="y" 
-                            values={apps} 
-                            onReorder={handleReorder}
+                            values={apps.filter(app => app.id !== 'home')} 
+                            onReorder={(newOrder) => handleReorder([apps[0], ...newOrder])}
                             className="flex flex-col gap-2 md:gap-3"
                         >
-                            {apps.map((app) => (
+                            {apps.filter(app => app.id !== 'home').map((app) => (
                                 <Reorder.Item 
                                     key={app.id} 
                                     value={app}
-                                    drag={app.id !== 'home'}
-                                    className={`${app.id === 'home' ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} group relative`}
+                                    className="cursor-grab active:cursor-grabbing group relative animate-fade-in"
                                 >
                                     <div 
                                         className="p-2 md:p-3 rounded-xl border border-transparent transition-all cursor-pointer hover:border-white/10 flex items-center justify-center" 
