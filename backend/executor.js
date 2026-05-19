@@ -41,7 +41,7 @@ async function execute(intentObj) {
         const tracks = await searchRes.json();
         if (tracks && tracks.error) {
           if (tracks.error.toLowerCase().includes("unauthorized") || tracks.error.toLowerCase().includes("auth")) {
-            return { ok: false, message: `I'm not connected to Spotify yet, Boss. Please authorize Spotify by visiting: ${spotifyBase.replace('localhost', '127.0.0.1')}/spotify/login` };
+            return { ok: false, message: `I'm not connected to Spotify yet, Boss. Please authorize Spotify by visiting: ${CLOUD_URL}/spotify/login` };
           }
           return { ok: false, message: `Spotify search error: ${tracks.error}` };
         }

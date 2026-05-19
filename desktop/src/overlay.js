@@ -606,12 +606,24 @@
   };
 
   let cachedVoices = [];
-  window.speechSynthesis.onvoiceschanged = () => {
-    cachedVoices = window.speechSynthesis.getVoices();
-    console.log('═══ AVAILABLE VOICES ═══');
-    cachedVoices.forEach((v, i) => console.log(`  [${i}] ${v.name} — ${v.lang} ${v.localService ? '(local)' : '(remote)'}`));
-    console.log('════════════════════════');
-  };
+  function loadVoices() {
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      cachedVoices = voices;
+      console.log('═══ DYNAMIC VOICES LOADED ═══');
+      cachedVoices.forEach((v, i) => console.log(`  [${i}] ${v.name} — ${v.lang}`));
+      console.log('════════════════════════════');
+    }
+  }
+
+  // Hook onto the voices changed event
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+  // Trigger initial load
+  loadVoices();
+  // Actively poll to defeat standard asynchronous Chromium loading delay
+  for (let i = 1; i <= 10; i++) {
+    setTimeout(loadVoices, i * 100);
+  }
 
   function pickVoice() {
     const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
