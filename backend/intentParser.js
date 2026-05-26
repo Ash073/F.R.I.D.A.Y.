@@ -1,3 +1,4 @@
+// c:\Users\Sayyed Ashif\Downloads\FRIDAY\friday\backend\intentParser.js
 /**
  * FRIDAY — Intent Classifier + Parser
  * 
@@ -5,6 +6,16 @@
  *   "command" → local execution (open app, call, search, etc.)
  *   "query"   → forward to AI API for intelligent response
  */
+
+let currentMode = 'auto';
+
+function getAIMode() {
+  return currentMode;
+}
+
+function setAIMode(mode) {
+  currentMode = mode;
+}
 
 // ── COMMAND PATTERNS ────────────────────────────────────────────────────────
 // These are matched in order. First match wins.
@@ -67,9 +78,9 @@ function stripWakeWords(text) {
     .replace(/[\s,.\-!?;:'"]+$/, "")
     .trim();
 
-  // 2. Remove wake words: "Hey Friday", "Friday", "FRIDAY", "F.R.I.D.A.Y."
+  // 2. Remove wake words: "Hey Friday", "if Friday", "Friday", "FRIDAY", "F.R.I.D.A.Y."
   cleaned = cleaned
-    .replace(/^(?:hey\s+)?(?:friday|f\.?r\.?i\.?d\.?a\.?y\.?)\s*[,.]?\s*/i, "")
+    .replace(/^(?:(?:hey|if)\s+)?(?:friday|f\.?r\.?i\.?d\.?a\.?y\.?)\s*[,.]?\s*/i, "")
     .trim();
 
   // 3. Remove greetings: "okay", "ok", "hey", "hi", "hello", "yo"
@@ -118,6 +129,50 @@ function classifyIntent(text) {
  * @returns {{ intent: string, type: "command"|"query", params: object, raw: string }}
  */
 function parseIntent(text) {
+  const transcript = stripWakeWords(text);
+  const lower = transcript.toLowerCase().trim();
+
+  // Priority Spotify Voice Intent Detection
+  if (lower.startsWith('play ') || lower.includes('play me ') || lower.includes('put on ')) {
+    const query = lower.replace(/^play me|^play|put on/i, '').trim();
+    return { intent: "SPOTIFY", type: "command", params: { action: 'spotify_play', query }, raw: text };
+  }
+  if (lower.includes('pause') || lower.includes('stop the music') || lower.includes('stop music')) {
+    return { intent: "SPOTIFY", type: "command", params: { action: 'spotify_pause' }, raw: text };
+  }
+  if (lower.includes('next song') || lower.includes('skip') || lower.includes('next track')) {
+    return { intent: "SPOTIFY", type: "command", params: { action: 'spotify_next' }, raw: text };
+  }
+  if (lower.includes('previous') || lower.includes('go back') || lower.includes('last song')) {
+    return { intent: "SPOTIFY", type: "command", params: { action: 'spotify_previous' }, raw: text };
+  }
+  if (lower.includes('volume up') || lower.includes('louder') || lower.includes('turn it up')) {
+    return { intent: "SPOTIFY", type: "command", params: { action: 'spotify_volume', direction: 'up' }, raw: text };
+  }
+  if (lower.includes('volume down') || lower.includes('quieter') || lower.includes('turn it down')) {
+    return { intent: "SPOTIFY", type: "command", params: { action: 'spotify_volume', direction: 'down' }, raw: text };
+  }
+  if (lower.includes("what's playing") || lower.includes('what is playing') || lower.includes('current song')) {
+    return { intent: "SPOTIFY", type: "command", params: { action: 'spotify_current' }, raw: text };
+  }
+
+  // ── DUAL-AI VOICE INTENT DETECTION ──
+  if (lower.includes('clear history') || lower.includes('forget conversation') || lower.includes('start over')) {
+    return { action: 'ai_clear_history', intent: 'AI_CLEAR_HISTORY', type: 'command', raw: text };
+  }
+  if (lower.includes('switch to gemini') || lower.includes('use gemini')) {
+    return { action: 'ai_set_mode', mode: 'gemini', intent: 'AI_SET_MODE', type: 'command', raw: text };
+  }
+  if (lower.includes('switch to openai') || lower.includes('use chatgpt') || lower.includes('use openai')) {
+    return { action: 'ai_set_mode', mode: 'openai', intent: 'AI_SET_MODE', type: 'command', raw: text };
+  }
+  if (lower.includes('use both') || lower.includes('merged mode') || lower.includes('best answer')) {
+    return { action: 'ai_set_mode', mode: 'merged', intent: 'AI_SET_MODE', type: 'command', raw: text };
+  }
+  if (lower.includes('use auto') || lower.includes('automatic mode')) {
+    return { action: 'ai_set_mode', mode: 'auto', intent: 'AI_SET_MODE', type: 'command', raw: text };
+  }
+
   const type = classifyIntent(text);
   const cleaned = stripWakeWords(text);
   
@@ -131,7 +186,7 @@ function parseIntent(text) {
   }
   
   // If classified as query, or no pattern matched
-  return { intent: "QUERY", type: "query", params: { question: text }, raw: text };
+  return { action: 'ai_query', query: transcript, mode: currentMode, intent: 'AI_QUERY', type: 'query', raw: text };
 }
 
-module.exports = { parseIntent, classifyIntent, stripWakeWords };
+module.exports = { parseIntent, classifyIntent, stripWakeWords, getAIMode, setAIMode };

@@ -1,4 +1,6 @@
 // c:\Users\Sayyed Ashif\Downloads\FRIDAY\friday\backend\server.js
+require('dotenv').config()
+
 /**
  * F.R.I.D.A.Y. Advanced Hybrid Backend Server
  * Dynamic Local (Edge) / Cloud deployment configurations.
@@ -12,7 +14,10 @@ const path = require("path");
 const os = require("os");
 const { spawn } = require("child_process");
 const { OpenAI } = require("openai");
-require("dotenv").config();
+
+// ── CLEAR SSLKEYLOGFILE TO PREVENT SSL ERRORS ──
+// Prevents PermissionError from inaccessible volume paths set by system tools
+delete process.env.SSLKEYLOGFILE;
 
 // Load Shared Config
 let sharedConfig = { ENABLE_WHISPER: true };
@@ -22,42 +27,21 @@ try {
   console.warn("[SERVER] Shared config.js not found at root, using default settings.");
 }
 
-const ENABLE_WHISPER = process.env.ENABLE_WHISPER !== undefined 
-  ? process.env.ENABLE_WHISPER === "true" 
-  : sharedConfig.ENABLE_WHISPER;
-
-const PORT = process.env.PORT || 3131;
+const PORT = process.env.PORT || 8888
+const ENABLE_WHISPER = process.env.ENABLE_WHISPER === 'true'
 
 const { parseIntent, stripWakeWords } = require("./intentParser");
 const { execute } = require("./executor");
 const { handleFollowUp } = require("./actionEngine");
 const spotifyRouter = require("./spotify");
+const { askFriday, clearHistory, getHistory, getAPIStatus } = require('./aiQuery');
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
 
-// ── CORS POLICY ──
-// Allow requests from localhost AND your specific Render / Railway domains
-const allowedOrigins = [
-  "http://localhost:3131",
-  "http://localhost:5173",
-  "http://localhost:8888",
-  "https://f-r-i-d-a-y-8ixf.onrender.com"
-];
-if (process.env.CLOUD_URL) {
-  allowedOrigins.push(process.env.CLOUD_URL);
-}
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1 && !origin.startsWith("http://localhost:")) {
-      return callback(null, true); // Allow flexibility but log warning
-    }
-    return callback(null, true);
-  },
-  credentials: true
-}));
+app.use(require('cors')({
+  origin: ['http://localhost:8888', 'http://localhost:3000', 'file://']
+}))
 
 app.use(express.json());
 
@@ -78,16 +62,26 @@ let whisperProcess = null;
 let whisperReady = false;
 let pendingTranscriptions = [];
 
-function startWhisperDaemon() {
+function startWhisperProcess() {
   if (!ENABLE_WHISPER) {
     console.log("[WHISPER DAEMON] Bypassing startup: Whisper STT is disabled in Cloud deployment.");
     return;
   }
 
   const TRANSCRIBE_SCRIPT = path.join(__dirname, "transcribe.py");
-  console.log("[WHISPER DAEMON] Initializing persistent Whisper Python process...");
+  if (!fs.existsSync(TRANSCRIBE_SCRIPT)) {
+    console.warn(`[WHISPER DAEMON] transcribe.py not found at ${TRANSCRIBE_SCRIPT}. Bypassing local Whisper STT.`);
+    whisperReady = false;
+    return;
+  }
+
+  console.log("[FRIDAY WHISPER] Process started");
   
-  whisperProcess = spawn("python", [TRANSCRIBE_SCRIPT]);
+  // Sanitize env: remove SSLKEYLOGFILE to prevent PermissionError in Python's SSL module
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.SSLKEYLOGFILE;
+
+  whisperProcess = spawn("python", [TRANSCRIBE_SCRIPT, "--serve"], { env: cleanEnv });
   let stdoutBuffer = "";
 
   whisperProcess.stdout.on("data", (data) => {
@@ -124,34 +118,32 @@ function startWhisperDaemon() {
   whisperProcess.stderr.on("data", (data) => {
     const errStr = data.toString("utf-8");
     if (!errStr.includes("warnings") && !errStr.includes("UserWarning") && !errStr.includes("FutureWarning")) {
-      console.warn("[WHISPER DAEMON stderr]:", errStr);
+      console.warn("[FRIDAY WHISPER ERROR]:", errStr);
     }
   });
 
   whisperProcess.on("error", (err) => {
-    console.error("[WHISPER DAEMON] ✗ Failed to start Python process (Python may not be installed):", err.message);
+    console.error("[FRIDAY WHISPER ERROR] Failed to start Python process (Python may not be installed):", err.message);
     whisperReady = false;
     whisperProcess = null;
   });
 
   whisperProcess.on("close", (code) => {
-    console.error(`[WHISPER DAEMON] Process exited with code ${code}.`);
+    console.error(`[FRIDAY WHISPER ERROR] Process exited with code ${code}.`);
     whisperReady = false;
     
     const oldPending = pendingTranscriptions;
     pendingTranscriptions = [];
     oldPending.forEach(p => p.resolve({ text: "", confidence: 0.0, error: "Process terminated unexpectedly" }));
     
-    if (whisperProcess) {
-      console.log("[WHISPER DAEMON] Restarting daemon in 5 seconds...");
-      whisperProcess = null;
-      setTimeout(startWhisperDaemon, 5000);
-    }
+    console.log("[FRIDAY WHISPER ERROR] Restarting process in 3 seconds...");
+    whisperProcess = null;
+    setTimeout(startWhisperProcess, 3000);
   });
 }
 
 // Boot daemon
-startWhisperDaemon();
+if (ENABLE_WHISPER) startWhisperProcess();
 
 
 // ── TRANSCRIPTION HELPER FUNCTIONS ──
@@ -220,16 +212,7 @@ async function transcribeAudio(audioPath) {
 
 // GET /health — returns backend metrics, mode, and configurations
 app.get("/health", (req, res) => {
-  try {
-    res.json({
-      status: "ok",
-      mode: ENABLE_WHISPER ? "local" : "cloud",
-      whisper: ENABLE_WHISPER,
-      timestamp: new Date().toISOString()
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  res.json({ status: 'ok', whisper: ENABLE_WHISPER, port: PORT, uptime: process.uptime() })
 });
 
 // POST /chat — compatibility intent parser helper
@@ -244,17 +227,75 @@ app.post("/chat", (req, res) => {
   }
 });
 
-// POST /ask — compatibility AI query routing
+// ── DUAL-AI ROUTE HANDLERS ──
+
+// POST /ask — Query the dual-AI system
 app.post("/ask", async (req, res) => {
   try {
-    const { message } = req.body;
-    if (!message) return res.status(400).json({ error: "message required" });
-    
-    const intent = parseIntent(message.trim());
-    const result = await execute(intent);
-    res.json({ text: result.message || JSON.stringify(result) });
+    const { message, mode } = req.body;
+
+    // Validation
+    if (!message || message.trim() === '') {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    if (message.length > 2000) {
+      return res.status(400).json({ error: 'Message too long' });
+    }
+    const validModes = ['gemini', 'openai', 'groq', 'cohere', 'merged', 'auto'];
+    if (mode !== undefined && !validModes.includes(mode)) {
+      return res.status(400).json({ error: 'Invalid mode' });
+    }
+
+    const modeToUse = mode || 'auto';
+    const reply = await askFriday(message, modeToUse);
+    const modeUsed = askFriday.lastUsedModel || modeToUse;
+
+    return res.status(200).json({
+      reply,
+      mode: modeUsed,
+      timestamp: new Date().toISOString()
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({
+      error: 'AI query failed',
+      detail: err.message
+    });
+  }
+});
+
+// POST /ask/clear — Clear conversation history
+app.post("/ask/clear", (req, res) => {
+  try {
+    clearHistory();
+    return res.status(200).json({
+      success: true,
+      message: 'Conversation history cleared'
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /ask/history — Get current conversation history
+app.get("/ask/history", (req, res) => {
+  try {
+    const history = getHistory();
+    return res.status(200).json({
+      history,
+      count: history.length
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /ask/status — fetch real-time 4-tier waterfall status
+app.get("/ask/status", (req, res) => {
+  try {
+    const status = getAPIStatus();
+    return res.status(200).json(status);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -295,16 +336,16 @@ app.post("/command", async (req, res) => {
 // POST /api/chat — compatibility core endpoint
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message, deviceId } = req.body;
+    const { message, deviceId, attachment } = req.body;
     if (!message) return res.status(400).json({ error: "message required" });
     
     const intent = parseIntent(message.trim());
     intent.params = intent.params || {};
     intent.params.deviceId = deviceId;
     
-    const result = await execute(intent);
+    const result = await execute(intent, attachment);
     
-    const responseText = result.message || JSON.stringify(result);
+    const responseText = result.message || result.reply || JSON.stringify(result);
     res.json({ text: responseText, intent, result });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -314,11 +355,11 @@ app.post("/api/chat", async (req, res) => {
 // POST /followup — context followups
 app.post("/followup", async (req, res) => {
   try {
-    const { followUpContext, answer } = req.body;
+    const { followUpContext, answer, deviceId } = req.body;
     if (!followUpContext || !answer) {
       return res.status(400).json({ error: "followUpContext and answer required" });
     }
-    const result = await handleFollowUp(followUpContext, answer);
+    const result = await handleFollowUp(followUpContext, answer, deviceId);
     res.json({ result: { ...result, type: "command" } });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -367,9 +408,62 @@ app.post("/api/launch-app", (req, res) => {
 // CONDITIONAL ROUTES — ONLY ACTIVE IF ENABLE_WHISPER = TRUE
 // ═══════════════════════════════════════════════════════════
 
-if (true) {
+if (ENABLE_WHISPER) {
+  // POST /transcribe/wake — high-speed wake word transcription
+  app.post("/transcribe/wake", upload.single("audio"), async (req, res) => {
+    let tempPath = null;
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No audio file provided" });
+      }
+
+      const tempDir = path.join(__dirname, "temp");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      tempPath = path.join(tempDir, "wake_audio.wav");
+      
+      // Move upload file to target wav file
+      fs.renameSync(req.file.path, tempPath);
+
+      // Perform fast request to Python Flask server on port 5002 with 3s timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+      const flaskRes = await fetch("http://localhost:5002/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audioPath: tempPath, mode: "wake" }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      const data = await flaskRes.json();
+
+      // Clean up temp file immediately after transcription
+      if (fs.existsSync(tempPath)) {
+        fs.unlinkSync(tempPath);
+      }
+      tempPath = null;
+
+      res.json({ transcript: data.transcript || data.text || "" });
+
+    } catch (error) {
+      if (tempPath && fs.existsSync(tempPath)) {
+        fs.unlinkSync(tempPath);
+      }
+      console.error("[FRIDAY WHISPER ERROR] Wake transcription failed:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // POST /transcribe
   app.post("/transcribe", upload.single("audio"), async (req, res) => {
+    if (!whisperReady) {
+      return res.status(503).json({ error: 'Whisper not ready' });
+    }
     let filePath = null;
     try {
       if (!req.file) {
@@ -399,7 +493,7 @@ if (true) {
       if (req.body.followUpContext) {
         const followUpContext = JSON.parse(req.body.followUpContext);
         if (followUpContext.type !== 'WAKE_FOLLOWUP') {
-          const result = await handleFollowUp(followUpContext, text);
+          const result = await handleFollowUp(followUpContext, text, req.body.deviceId);
           return res.json({
             text,
             confidence,
@@ -411,7 +505,7 @@ if (true) {
 
       // Check manual / wake word activation
       const WAKE_PATTERNS = [
-        /(?:hey|hello|hi|ok|okay|here)\s*(?:friday|f\.?r\.?i\.?d\.?a\.?y)/i,
+        /(?:hey|hello|hi|ok|okay|here|if)\s*(?:friday|f\.?r\.?i\.?d\.?a\.?y)/i,
         /^(?:friday|f\.?r\.?i\.?d\.?a\.?y)\b/i,
       ];
       const containsWakeWord = WAKE_PATTERNS.some(p => p.test(text.trim()));
@@ -473,11 +567,98 @@ if (true) {
   });
 }
 
+// GET /api/api-status — fetch configurations and exhaustion states for slots
+app.get("/api/api-status", (req, res) => {
+  try {
+    const { getExhaustionStatus } = require("./aiQuery");
+    const { geminiExhausted, openaiExhausted } = getExhaustionStatus();
+    
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const openaiKey = process.env.OPENAI_API_KEY;
+
+    res.json({
+      gemini: {
+        configured: !!geminiKey,
+        exhausted: geminiExhausted,
+        masked: geminiKey ? `${geminiKey.substring(0, 7)}...${geminiKey.substring(geminiKey.length - 4)}` : null
+      },
+      openai: {
+        configured: !!openaiKey,
+        exhausted: openaiExhausted,
+        masked: openaiKey ? `${openaiKey.substring(0, 7)}...${openaiKey.substring(openaiKey.length - 4)}` : null
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/save-keys — persistently update slots, write to .env, and update memory
+app.post("/api/save-keys", async (req, res) => {
+  try {
+    const { geminiApiKey, openaiApiKey } = req.body;
+    
+    if (geminiApiKey !== undefined) {
+      process.env.GEMINI_API_KEY = geminiApiKey;
+    }
+    if (openaiApiKey !== undefined) {
+      process.env.OPENAI_API_KEY = openaiApiKey;
+    }
+
+    const { resetExhaustion } = require("./aiQuery");
+    resetExhaustion();
+
+    const envPath = path.join(__dirname, ".env");
+    let envContent = "";
+    if (fs.existsSync(envPath)) {
+      envContent = fs.readFileSync(envPath, "utf8");
+    }
+
+    let lines = envContent.split(/\r?\n/);
+    let hasGemini = false;
+    let hasOpenai = false;
+
+    lines = lines.map(line => {
+      if (line.startsWith("GEMINI_API_KEY=")) {
+        hasGemini = true;
+        return `GEMINI_API_KEY=${geminiApiKey || ""}`;
+      }
+      if (line.startsWith("OPENAI_API_KEY=")) {
+        hasOpenai = true;
+        return `OPENAI_API_KEY=${openaiApiKey || ""}`;
+      }
+      return line;
+    });
+
+    if (!hasGemini && geminiApiKey !== undefined) {
+      lines.push(`GEMINI_API_KEY=${geminiApiKey}`);
+    }
+    if (!hasOpenai && openaiApiKey !== undefined) {
+      lines.push(`OPENAI_API_KEY=${openaiApiKey}`);
+    }
+
+    fs.writeFileSync(envPath, lines.join("\n"), "utf8");
+
+    res.json({ ok: true, message: "API credentials successfully updated in system." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+app.use((err, req, res, next) => {
+  console.error('[FRIDAY ERROR]', err.message)
+  res.status(500).json({ error: err.message })
+})
 
 app.listen(PORT, () => {
-  console.log(`\n══════════════════════════════════════════`);
-  console.log(`  F.R.I.D.A.Y. Advanced Server -> Port: ${PORT}`);
-  console.log(`  Mode:    ${ENABLE_WHISPER ? "LOCAL (Edge)" : "CLOUD"}`);
-  console.log(`  Whisper: ${ENABLE_WHISPER ? "Active" : "Bypassed"}`);
-  console.log(`══════════════════════════════════════════\n`);
-});
+  console.log(`[FRIDAY] Backend running on port ${PORT}`)
+  console.log(`[FRIDAY] Whisper enabled: ${ENABLE_WHISPER}`)
+})
+
+process.on('uncaughtException', (err) => {
+  console.error('[FRIDAY CRASH]', err)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[FRIDAY REJECTION]', reason)
+})

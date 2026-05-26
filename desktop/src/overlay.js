@@ -1,4 +1,4 @@
-// ═══════════════════════════════════════════════════════════
+// c:\Users\Sayyed Ashif\Downloads\FRIDAY\friday\desktop\src\overlay.js
 // F.R.I.D.A.Y. — ADVANCED VOICE ISOLATION PIPELINE
 // Multi-stage: Mic → Filters → VAD → Near-field → Whisper
 // ═══════════════════════════════════════════════════════════
@@ -79,6 +79,18 @@
   async function bootFriday() {
     console.log('[FRIDAY] ⚡ Booting voice isolation pipeline...');
     setStatus('Initializing...');
+
+    // Initialize wake word system
+    if (window.fridayWakeWord && typeof window.fridayWakeWord.init === 'function') {
+      window.fridayWakeWord.init().then(success => {
+        if (success) {
+          console.log('[FRIDAY] Wake word engine running');
+        } else {
+          console.error('[FRIDAY] Wake word engine failed to start');
+          setStatus('Mic access error');
+        }
+      });
+    }
 
     try {
       audioCtx = new AudioContext({ sampleRate: 16000 });
@@ -332,21 +344,10 @@
       barT[b] = s / bs / 255;
     }
 
-    // ── IDLE: Voice activity detection ──
+    // ── IDLE: Voice activity detection (disabled — background wake word handles capture) ──
     if (state === 'idle') {
       targetAmp = rawAmp * 0.3;
-      const vad = detectVoice();
-
-      if (vad.isSpeech) {
-        voiceDetectTime += 16;
-        if (voiceDetectTime >= VOICE_TRIGGER_MS) {
-          console.log(`[VAD] ✓ Speech detected (score=${vad.score.toFixed(2)}, RMS=${vad.rms.toFixed(3)}, centroid=${vad.centroid.toFixed(0)}Hz, floor=${noiseFloor.toFixed(3)})`);
-          startRecording();
-          voiceDetectTime = 0;
-        }
-      } else {
-        voiceDetectTime = Math.max(0, voiceDetectTime - 8); // Slow decay
-      }
+      // VAD continuous trigger disabled
     }
 
     // ── LISTENING: Silence detection ──
@@ -436,6 +437,9 @@
 
     const formData = new FormData();
     formData.append('audio', audioBlob, 'recording.webm');
+    if (manualActivation) {
+      formData.append('manual', 'true');
+    }
     if (window.fridayDeviceId) {
       formData.append('deviceId', window.fridayDeviceId);
     }
@@ -496,6 +500,24 @@
   // ═══════════════════════════════════════════════════════════
 
   function handleResult(result, intent) {
+    if (intent && intent.action === 'ai_query') {
+      if (typeof window.fridayOpenChat === 'function') {
+        window.fridayOpenChat();
+        setTimeout(() => {
+          const chatInput = document.getElementById('chat-input');
+          if (chatInput) {
+            chatInput.value = intent.query || intent.raw || '';
+            // Trigger auto-resize event
+            chatInput.dispatchEvent(new Event('input'));
+            // Trigger send button click
+            const sendBtn = document.getElementById('chat-send-btn');
+            if (sendBtn) sendBtn.click();
+          }
+        }, 500);
+      }
+      return;
+    }
+
     const msg = result.message || JSON.stringify(result);
     const type = result.type || intent?.type || 'command';
 
@@ -526,6 +548,11 @@
       setStatus('AI responding...');
       setTimeout(() => speak(msg), 200);
     }
+
+    // Trigger API status update after response completes or during thinking
+    setTimeout(() => {
+      if (typeof showAPIStatus === 'function') showAPIStatus();
+    }, 1500);
   }
 
   async function handleFollowUpAnswer(answerText) {
@@ -725,10 +752,82 @@
   window.fridaySetStatus = (t1, t2) => setStatus(t2 ? `${t1} - ${t2}` : t1);
   window.fridayAmplitude = 0;
 
+  let fridayAIMode = 'auto';
+
+  function updateModeDisplay(mode) {
+    fridayAIMode = mode;
+    const modeLabels = {
+      gemini: 'GEMINI PRO',
+      openai: 'GPT-4O',
+      merged: 'DUAL AI',
+      auto: 'AUTO'
+    };
+    window.fridaySetStatus('AI MODE', modeLabels[mode] || 'AUTO');
+  }
+
+  window.fridaySetAIMode = updateModeDisplay;
+
+  // Expose global command processor for the wake word engine
+  window.fridayProcessCommand = async (transcript) => {
+    console.log('[FRIDAY] Processing command: ' + transcript);
+    if (pendingFollowUp && transcript) {
+      cmdInput.value = transcript;
+      clearFollowUpTimer();
+      await handleFollowUpAnswer(transcript);
+    } else {
+      cmdInput.value = transcript;
+      await sendTextCommand(transcript);
+    }
+  };
+
+  // Wrap Chat open/close to pause/resume wake word
+  window.addEventListener('DOMContentLoaded', () => {
+    if (typeof window.fridayOpenChat === 'function') {
+      const originalOpenChat = window.fridayOpenChat;
+      window.fridayOpenChat = function() {
+        if (window.fridayWakeWord && typeof window.fridayWakeWord.pause === 'function') {
+          window.fridayWakeWord.pause();
+        }
+        return originalOpenChat.apply(this, arguments);
+      };
+    }
+
+    if (typeof window.fridayCloseChat === 'function') {
+      const originalCloseChat = window.fridayCloseChat;
+      window.fridayCloseChat = function() {
+        if (window.fridayWakeWord && typeof window.fridayWakeWord.resume === 'function') {
+          window.fridayWakeWord.resume();
+        }
+        return originalCloseChat.apply(this, arguments);
+      };
+    }
+  });
+
   function clearBars() { for (let b = 0; b < BAR_COUNT; b++) barT[b] = 0; }
 
-  orbZone.addEventListener('click', () => { if (state === 'idle') { manualActivation = true; startRecording(); } else if (state === 'listening') stopRecording(); });
-  voiceBtn.addEventListener('click', () => { if (state === 'idle') { manualActivation = true; startRecording(); } else if (state === 'listening') stopRecording(); });
+  orbZone.addEventListener('click', () => {
+    if (state === 'idle') {
+      if (window.fridayWakeWord && typeof window.fridayWakeWord.manualTrigger === 'function') {
+        window.fridayWakeWord.manualTrigger();
+      }
+    } else if (state === 'listening') {
+      if (window.fridayWakeWord && typeof window.fridayWakeWord.manualStop === 'function') {
+        window.fridayWakeWord.manualStop();
+      }
+    }
+  });
+
+  voiceBtn.addEventListener('click', () => {
+    if (state === 'idle') {
+      if (window.fridayWakeWord && typeof window.fridayWakeWord.manualTrigger === 'function') {
+        window.fridayWakeWord.manualTrigger();
+      }
+    } else if (state === 'listening') {
+      if (window.fridayWakeWord && typeof window.fridayWakeWord.manualStop === 'function') {
+        window.fridayWakeWord.manualStop();
+      }
+    }
+  });
 
   cmdInput.addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter') return;
@@ -741,10 +840,85 @@
 
   document.getElementById('closeBtn').addEventListener('click', () => window.close());
 
-  // Check health of local Edge server on startup
-  if (window.checkLocalHealth) {
-    window.checkLocalHealth();
+  window.FRIDAY_CLOUD_URL = 'YOUR_CLOUD_URL_HERE'
+
+  async function showAPIStatus() {
+    try {
+      const status = await window.fridayFetch('status', '/ask/status');
+      if (!status) return;
+
+      const formatEngine = (name, key) => {
+        const info = status[key];
+        const isOnline = info && info.configured && !info.exhausted;
+        return `${name} ${isOnline ? '●' : '○'}`;
+      };
+
+      const geminiStr = formatEngine('GEMINI', 'gemini');
+      const groqStr = formatEngine('GROQ', 'groq');
+      const cohereStr = formatEngine('COHERE', 'cohere');
+      const mistralStr = formatEngine('MISTRAL', 'mistral');
+
+      const displayText = `${geminiStr} &nbsp;·&nbsp; ${groqStr} &nbsp;·&nbsp; ${cohereStr} &nbsp;·&nbsp; ${mistralStr}`;
+
+      let apiStatusEl = document.getElementById('api-status');
+      if (!apiStatusEl) {
+        apiStatusEl = document.createElement('div');
+        apiStatusEl.id = 'api-status';
+        apiStatusEl.style.fontFamily = "'JetBrains Mono', monospace";
+        apiStatusEl.style.fontSize = "7.5px";
+        apiStatusEl.style.fontWeight = "600";
+        apiStatusEl.style.letterSpacing = "0.08em";
+        apiStatusEl.style.color = "rgba(255, 170, 0, 0.55)";
+        apiStatusEl.style.marginTop = "2px";
+        apiStatusEl.style.textTransform = "uppercase";
+        apiStatusEl.style.transition = "opacity 0.3s ease";
+        const statusEl = document.getElementById('status');
+        if (statusEl && statusEl.parentNode) {
+          statusEl.parentNode.appendChild(apiStatusEl);
+        }
+      }
+      apiStatusEl.innerHTML = displayText;
+    } catch (err) {
+      console.warn('[FRIDAY AI] Failed to fetch API status:', err.message);
+    }
   }
+
+  window.fridayShowAPIStatus = showAPIStatus;
+
+  checkLocalHealth().then(online => {
+    if (online) {
+      fridaySetStatus('BACKEND ONLINE', 'Local system ready');
+      showAPIStatus();
+    } else {
+      fridaySetStatus('BACKEND OFFLINE', 'Check PM2 status');
+    }
+  });
+
+  // Refresh every 5 minutes
+  setInterval(() => {
+    if (window.FRIDAY_LOCAL_ONLINE) {
+      showAPIStatus();
+    }
+  }, 5 * 60 * 1000);
+
+  // Add keyboard shortcuts for chat screen
+  document.addEventListener('keydown', (e) => {
+    const chatScreen = document.getElementById('friday-chat-screen');
+    const isChatActive = chatScreen && chatScreen.classList.contains('chat-active');
+    
+    if (e.key === 'Escape' && isChatActive) {
+      if (typeof window.fridayCloseChat === 'function') {
+        window.fridayCloseChat();
+      }
+    }
+    
+    if (e.ctrlKey && e.key === 'k') {
+      e.preventDefault();
+      if (typeof window.fridayOpenChat === 'function') {
+        window.fridayOpenChat();
+      }
+    }
+  });
 
 })();
 

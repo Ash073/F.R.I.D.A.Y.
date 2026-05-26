@@ -1,8 +1,59 @@
 // c:\Users\Sayyed Ashif\Downloads\FRIDAY\friday\desktop\src\utils\spotifyPlayer.js
+/**
+ * F.R.I.D.A.Y. Spotify Web Playback SDK integration & HUD Sync Module.
+ * Connects the virtual 'FRIDAY System' Web Player, coordinates dual widget displays,
+ * manages progress bars/tickers, and handles direct/priority playback commands.
+ */
 
 const CLOUD_URL = window.FRIDAY_CLOUD_URL || 'https://f-r-i-d-a-y-8ixf.onrender.com';
+const LOCAL_URL = 'http://localhost:8888';
 
 let progressInterval = null;
+
+/**
+ * Smart fetch helper that queries the local backend first, falling back to cloud.
+ */
+async function fetchFromBackend(path, options = {}) {
+  const targetPath = path.startsWith('/') ? path : `/${path}`;
+  
+  // Try to use the pre-loaded dynamic routing client if it exists (automatically handles port detection)
+  if (typeof window !== 'undefined' && window.friday && typeof window.friday.fridayFetch === 'function') {
+    try {
+      const res = await window.friday.fridayFetch('spotify', targetPath, options);
+      if (res.ok) return res;
+      throw new Error(`fridayFetch returned status ${res.status}`);
+    } catch (err) {
+      console.log(`[FRIDAY Spotify] Dynamic router unavailable (${err.message}). Using static local fallback...`);
+    }
+  }
+
+  // Fallback to static localhost URL
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${LOCAL_URL}${targetPath}`, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) return res;
+    throw new Error(`Local returned status ${res.status}`);
+  } catch (err) {
+    console.log(`[FRIDAY Spotify] Local endpoint unavailable (${err.message}). Using cloud...`);
+    return await fetch(`${CLOUD_URL}${targetPath}`, options);
+  }
+}
+
+/**
+ * Convert milliseconds to "m:ss" format
+ */
+function formatTime(ms) {
+  if (isNaN(ms) || ms < 0) return '0:00';
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+}
 
 export async function initSpotifyPlayer() {
   try {
@@ -22,8 +73,8 @@ export async function initSpotifyPlayer() {
       try {
         console.log("[FRIDAY Spotify] Web Playback SDK is Ready. Fetching OAuth Token...");
         
-        // 3. Fetch token: GET ${CLOUD_URL}/spotify/token
-        const tokenRes = await fetch(`${CLOUD_URL}/spotify/token`);
+        // 3. Fetch token: GET /spotify/token
+        const tokenRes = await fetchFromBackend('/spotify/token');
         const tokenData = await tokenRes.json();
         const token = tokenData.token;
         if (!token) {
@@ -71,7 +122,6 @@ export async function initSpotifyPlayer() {
 
         player.addListener('authentication_error', async ({ message }) => {
           console.error('[FRIDAY Spotify] Authentication Error:', message);
-          // Try to refresh token and re-init player
           if (typeof window.fridaySetStatus === 'function') {
             window.fridaySetStatus('SPOTIFY AUTH ERROR', 'Refreshing token...');
           }
@@ -100,9 +150,26 @@ export async function initSpotifyPlayer() {
         console.error("[FRIDAY Spotify] error during SDK setup:", err);
       }
     };
+
+    // Wire HUD widget listeners after dynamic load
+    wireHudListeners();
+
   } catch (err) {
     console.error("[FRIDAY Spotify] initSpotifyPlayer failed:", err);
   }
+}
+
+/**
+ * Binds control buttons on the premium HUD widget to their actions
+ */
+function wireHudListeners() {
+  const prevHud = document.getElementById('sp-prev-hud');
+  const playPauseHud = document.getElementById('sp-playpause-hud');
+  const nextHud = document.getElementById('sp-next-hud');
+
+  if (prevHud) prevHud.onclick = () => spotifyCommand('previous');
+  if (playPauseHud) playPauseHud.onclick = () => window.fridayPlayer?.togglePlay();
+  if (nextHud) nextHud.onclick = () => spotifyCommand('next');
 }
 
 export function updateSpotifyWidget(state) {
@@ -120,7 +187,7 @@ export function updateSpotifyWidget(state) {
     const position = state.position;
     const duration = state.duration;
 
-    // Update HTML
+    // --- Update Widget 1: Old #spotify-widget ---
     const trackEl = document.getElementById('sp-track-name');
     const artistEl = document.getElementById('sp-artist-name');
     const artEl = document.getElementById('sp-album-art');
@@ -133,21 +200,36 @@ export function updateSpotifyWidget(state) {
     if (playPauseBtn) {
       playPauseBtn.innerText = isPaused ? '▶' : '⏸';
     }
-
-    // Show widget
     if (widgetEl) widgetEl.classList.add('active');
 
-    // Update HUD
+    // --- Update Widget 2: New HUD #sp-widget ---
+    const hudTrackEl = document.getElementById('sp-track');
+    const hudArtistEl = document.getElementById('sp-artist');
+    const hudArtEl = document.getElementById('sp-art');
+    const hudPlayPauseBtn = document.getElementById('sp-playpause-hud');
+    const hudWidgetEl = document.getElementById('sp-widget');
+    const hudTotalEl = document.getElementById('sp-total');
+
+    if (hudTrackEl) hudTrackEl.innerText = trackName;
+    if (hudArtistEl) hudArtistEl.innerText = artistName;
+    if (hudArtEl) hudArtEl.src = albumArtUrl;
+    if (hudPlayPauseBtn) {
+      hudPlayPauseBtn.innerText = isPaused ? '▶' : '⏸';
+    }
+    if (hudTotalEl) hudTotalEl.innerText = formatTime(duration);
+    if (hudWidgetEl) hudWidgetEl.classList.add('sp-active');
+
+    // Update HUD System status readout
     if (typeof window.fridaySetStatus === 'function') {
       window.fridaySetStatus(trackName, artistName);
     }
 
-    // Store state on window
+    // Store state on window for intervals
     window.fridayCurrentDuration = duration;
     window.fridayCurrentPosition = position;
     window.fridayIsPlaying = !isPaused;
 
-    // Reactor Core pulse state integration
+    // Sync reactor visual orb state
     if (typeof window.fridaySetState === 'function') {
       window.fridaySetState(isPaused ? 'idle' : 'speaking');
     }
@@ -158,8 +240,13 @@ export function updateSpotifyWidget(state) {
 
 export function hideSpotifyWidget() {
   try {
+    // Hide standard widget
     const widgetEl = document.getElementById('spotify-widget');
     if (widgetEl) widgetEl.classList.remove('active');
+
+    // Hide premium HUD widget
+    const hudWidgetEl = document.getElementById('sp-widget');
+    if (hudWidgetEl) hudWidgetEl.classList.remove('sp-active');
     
     window.fridayIsPlaying = false;
 
@@ -182,9 +269,20 @@ export function updateProgress() {
     window.fridayCurrentPosition += 500;
     const percent = Math.min((window.fridayCurrentPosition / window.fridayCurrentDuration) * 100, 100);
 
+    // Update old widget progress
     const fillEl = document.querySelector('.sp-progress-fill');
     if (fillEl) {
       fillEl.style.width = percent + '%';
+    }
+
+    // Update new HUD widget progress
+    const hudFillEl = document.getElementById('sp-fill');
+    const hudElapsedEl = document.getElementById('sp-elapsed');
+    if (hudFillEl) {
+      hudFillEl.style.width = percent + '%';
+    }
+    if (hudElapsedEl) {
+      hudElapsedEl.innerText = formatTime(window.fridayCurrentPosition);
     }
   } catch (err) {
     console.error("[FRIDAY Spotify] updateProgress failed:", err);
@@ -194,14 +292,14 @@ export function updateProgress() {
 export async function spotifyCommand(action, params = {}) {
   try {
     console.log(`[FRIDAY Spotify] Dispatching command: ${action}`, params);
-    let url = `${CLOUD_URL}/spotify/${action}`;
+    let path = `/spotify/${action}`;
     let method = 'POST';
     let headers = { 'Content-Type': 'application/json' };
     let body = null;
 
     if (action === 'search') {
       method = 'GET';
-      url = `${CLOUD_URL}/spotify/search?q=${encodeURIComponent(params.query)}`;
+      path = `/spotify/search?q=${encodeURIComponent(params.query)}`;
     } else if (action === 'play') {
       body = JSON.stringify({ uri: params.uri, device_id: window.fridayDeviceId });
     } else if (action === 'volume') {
@@ -214,7 +312,7 @@ export async function spotifyCommand(action, params = {}) {
     const options = { method, headers };
     if (body) options.body = body;
 
-    const res = await fetch(url, options);
+    const res = await fetchFromBackend(path, options);
     if (!res.ok) throw new Error(`Spotify API replied with code ${res.status}`);
     
     if (action === 'search') {

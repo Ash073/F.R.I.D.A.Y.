@@ -6,6 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -70,8 +71,124 @@
     <div class="sp-footer">FRIDAY AUDIO ENGINE</div>
   </div>
 
+  <!-- FRIDAY SPOTIFY WIDGET -->
+  <div id="sp-widget">
+
+    <div class="sp-header">
+      <span class="sp-dot"></span>
+      <span class="sp-now-playing">NOW PLAYING</span>
+      <span class="sp-brand">FRIDAY HUD</span>
+    </div>
+
+    <div class="sp-body">
+      <img id="sp-art" src="" alt="album art" width="56" height="56" />
+      <div class="sp-info">
+        <div id="sp-track">—</div>
+        <div id="sp-artist">—</div>
+        <div class="sp-progress-wrap">
+          <div class="sp-progress-bg">
+            <div class="sp-progress-fill" id="sp-fill"></div>
+          </div>
+          <div class="sp-time">
+            <span id="sp-elapsed">0:00</span>
+            <span id="sp-total">0:00</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sp-controls">
+      <button id="sp-prev-hud" title="Previous">⏮</button>
+      <button id="sp-playpause-hud" title="Play/Pause">⏸</button>
+      <button id="sp-next-hud" title="Next">⏭</button>
+    </div>
+
+    <div class="sp-footer">FRIDAY AUDIO ENGINE &nbsp;·&nbsp; STREAM LIVE</div>
+
+  </div>
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- TASK 1 — CHAT SCREEN OVERLAY -->
+  <!-- ════════════════════════════════════════ -->
+  <div id="friday-chat-screen">
+    
+    <!-- HEADER BAR -->
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <button id="chat-back-btn">← FRIDAY</button>
+      </div>
+      <div class="chat-header-center">
+        <div class="chat-title">F.R.I.D.A.Y. INTELLIGENCE</div>
+        <div id="chat-ai-status">INTELLIGENCE ONLINE</div>
+      </div>
+      <div class="chat-header-right">
+        <div class="chat-mode-wrapper">
+          <select id="chat-mode-select">
+            <option value="AUTO">AUTO</option>
+            <option value="GEMINI">GEMINI</option>
+            <option value="GROQ">GROQ</option>
+            <option value="COHERE">COHERE</option>
+            <option value="MERGED">MERGED</option>
+          </select>
+        </div>
+        <button id="chat-clear-btn">CLEAR</button>
+      </div>
+    </div>
+
+    <!-- MESSAGES AREA -->
+    <div id="chat-messages">
+      <!-- Typing Indicator -->
+      <div id="chat-typing" class="chat-msg chat-msg-ai" style="display: none;">
+        <div class="chat-msg-label">
+          <span class="chat-msg-dot"></span>
+          <span class="chat-msg-friday">FRIDAY</span>
+          <span class="chat-msg-sep">·</span>
+          <span class="chat-msg-engine">THINKING</span>
+        </div>
+        <div class="chat-msg-content">
+          <div class="chat-typing-dots">
+            <span class="chat-dot"></span>
+            <span class="chat-dot"></span>
+            <span class="chat-dot"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FILE ATTACHMENT PREVIEW AREA -->
+    <div id="chat-attachments" style="display: none;"></div>
+
+    <!-- INPUT AREA -->
+    <div class="chat-input-area">
+      <div class="chat-input-container">
+        
+        <!-- ROW 1 — Attachment action buttons -->
+        <div class="chat-input-row-actions">
+          <button id="chat-attach-btn">📎 FILE</button>
+          <button id="chat-image-btn">🖼 IMAGE</button>
+          <input type="file" id="chat-file-input" style="display: none;" />
+        </div>
+
+        <!-- ROW 2 — Main input row -->
+        <div class="chat-input-row-main">
+          <textarea id="chat-input" placeholder="Ask FRIDAY anything..." rows="1"></textarea>
+          <button id="chat-send-btn">➤</button>
+        </div>
+
+        <!-- Below input row — tiny hint text -->
+        <div class="chat-input-hint">
+          FRIDAY may make mistakes · Powered by Gemini · Groq · Cohere · Mistral
+        </div>
+      </div>
+    </div>
+
+  </div>
+
   <script src="utils/fridayFetch.js"></script>
   <script src="https://sdk.scdn.co/spotify-player.js"></script>
   <script src="overlay.js"></script>
+  <script src="utils/fridayChat.js"></script>
+  <script src="./utils/voiceEnrollment.js"></script>
+  <script src="./utils/wakeWord.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // ═══════════════════════════════════════════════════════════
 // F.R.I.D.A.Y. Voice Pipeline — React Hook
@@ -20,7 +20,7 @@ export async function smartFetch(path: string, options: RequestInit = {}): Promi
   
   for (const port of ports) {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 2000);
+    const id = setTimeout(() => controller.abort(), 5000);
     try {
       const res = await fetch(`http://localhost:${port}${targetPath}`, {
         ...options,
@@ -35,6 +35,26 @@ export async function smartFetch(path: string, options: RequestInit = {}): Promi
 
   // Fallback to cloud
   return await fetch(`https://f-r-i-d-a-y-8ixf.onrender.com${targetPath}`, options);
+}
+
+// Dynamically auto-detect the active backend base URL (local or cloud)
+export async function getBackendBaseUrl(): Promise<string> {
+  const ports = ['3131', '8888'];
+  for (const port of ports) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 1000);
+    try {
+      const res = await fetch(`http://localhost:${port}/api/api-status`, { 
+        method: 'GET',
+        signal: controller.signal
+      });
+      clearTimeout(id);
+      if (res.ok) return `http://localhost:${port}`;
+    } catch (err) {
+      clearTimeout(id);
+    }
+  }
+  return `https://f-r-i-d-a-y-8ixf.onrender.com`;
 }
 
 export interface VoiceProfile {
@@ -115,7 +135,7 @@ export function useFridayVoicePipeline(
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -30; comp.knee.value = 10; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.1;
 
-      const aRaw = ctx.createAnalyser(); aRaw.fftSize = 256; aRaw.smoothingTimeConstant = 0.7;
+      const aRaw = ctx.createAnalyser(); aRaw.fftSize = 1024; aRaw.smoothingTimeConstant = 0.7;
       analyzerRawRef.current = aRaw;
       const aFilt = ctx.createAnalyser(); aFilt.fftSize = 512; aFilt.smoothingTimeConstant = 0.75;
       analyzerFilteredRef.current = aFilt;
@@ -415,6 +435,9 @@ export function useFridayVoicePipeline(
     fd.append('manual', wasManual ? 'true' : 'false');
     if (pendingFollowUpRef && pendingFollowUpRef.current) {
       fd.append('followUpContext', JSON.stringify(pendingFollowUpRef.current));
+    }
+    if ((window as any).fridayDeviceId) {
+      fd.append('deviceId', (window as any).fridayDeviceId);
     }
 
     try {

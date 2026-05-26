@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Spotify token cache (auto-generated, contains OAuth tokens)
+.spotify_tokens.json
+
 # Dependency directories
 node_modules/
 jspm_packages/

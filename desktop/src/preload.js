@@ -1,9 +1,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 // Standalone smart-routing VAD local-first fetch client to bypass sandbox require restrictions
-let LOCAL = 'http://localhost:3131';
+let LOCAL = 'http://localhost:8888';
 const CLOUD = 'https://f-r-i-d-a-y-8ixf.onrender.com';
-const cloudOnlyFeatures = ['spotify', 'mobile'];
+const cloudOnlyFeatures = ['mobile'];
 
 async function fetchWithTimeout(resource, options = {}, timeoutMs = 2000) {
   const controller = new AbortController();
@@ -74,8 +74,15 @@ contextBridge.exposeInMainWorld("friday", {
   saveCustomApps: (apps) => ipcRenderer.invoke("friday:save-custom-apps", apps),
   getCustomApps: () => ipcRenderer.invoke("friday:get-custom-apps"),
   openSpotify: () => ipcRenderer.send("friday:open-spotify"),
+  openExternal: (url) => ipcRenderer.send("friday:open-external", url),
   
   // Smart-routing fetch clients exposed directly to the React window context
   fridayFetch: (feature, path, options) => fridayFetch(feature, path, options),
   checkLocalHealth: () => checkLocalHealth(),
+});
+
+contextBridge.exposeInMainWorld("electronAPI", {
+  saveVoiceProfile: (profileJSON) => ipcRenderer.invoke('save-voice-profile', profileJSON),
+  loadVoiceProfile: () => ipcRenderer.invoke('load-voice-profile'),
+  clearVoiceProfile: () => ipcRenderer.invoke('clear-voice-profile')
 });

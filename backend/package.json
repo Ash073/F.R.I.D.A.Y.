@@ -3,12 +3,21 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "start:pm2": "pm2 start ecosystem.config.js",
+    "stop:pm2": "pm2 stop friday-backend",
+    "restart:pm2": "pm2 restart friday-backend",
+    "logs": "pm2 logs friday-backend",
+    "status": "pm2 status",
+    "save:pm2": "pm2 save"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^17.4.2",
-    "express": "^4.18.2",
+    "@google/generative-ai": "^0.24.1",
+    "axios": "latest",
+    "cohere-ai": "^8.0.0",
+    "cors": "latest",
+    "dotenv": "latest",
+    "express": "latest",
     "multer": "^2.1.1",
     "openai": "^6.34.0"
   }

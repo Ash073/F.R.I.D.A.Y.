@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mic, MicOff, Send, Terminal, Shield, Zap, Settings as SettingsIcon, Home } from 'lucide-react';
+import { Mic, MicOff, Send, Terminal, Shield, Zap, Settings as SettingsIcon, Home, MessageSquare } from 'lucide-react';
 import ReactorCore from './components/ReactorCore';
 import HUDOverlay from './components/HUDOverlay';
 import QuickAccessTray from './components/QuickAccessTray';
 import SettingsDrawer from './components/SettingsDrawer';
 import SystemMetricsDashboard from './components/SystemMetricsDashboard';
-import { useFridayVoicePipeline, TranscribeResult, VoiceProfile, smartFetch } from './hooks/useFridayVoicePipeline';
+import { useFridayVoicePipeline, TranscribeResult, VoiceProfile, smartFetch, getBackendBaseUrl } from './hooks/useFridayVoicePipeline';
 import VoiceProfileWizard from './components/VoiceProfileWizard';
+import SpotifyWidget from './components/SpotifyWidget';
+import { useSpotifyPlayer } from './hooks/useSpotifyPlayer';
+import InteractiveChatPanel from './components/InteractiveChatPanel';
 
 type AssistantState = 'idle' | 'listening' | 'processing' | 'speaking';
 
@@ -37,11 +40,19 @@ export const DEFAULT_SETTINGS: Settings = {
     showGeodata: true,
     showScanlines: true,
     showMetricsBtn: true,
-    alwaysOnVoice: false, // Default to FALSE to ensure it does not listen on its own!
-    voiceLock: false,
+    alwaysOnVoice: true, // Default to TRUE to keep the system active all the time!
+    voiceLock: true,     // Default to TRUE to secure the system via voice print lock!
     voicePitch: 145,
     voiceProfile: undefined,
 };
+
+// Format milliseconds to mm:ss for the audio deck progress display
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
 
 export default function App() {
   const [state, setState] = useState<AssistantState>('idle');
@@ -49,6 +60,30 @@ export default function App() {
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant', text: string }[]>([]);
   const [systemLoad, setSystemLoad] = useState(12.4);
   const [status, setStatus] = useState('ONLINE');
+
+  const { 
+    state: spotifyState, 
+    widgetMode: spotifyWidgetMode,
+    showWidget: spotifyShowWidget,
+    hideWidget: spotifyHideWidget,
+    minimizeWidget: spotifyMinimizeWidget,
+    expandWidget: spotifyExpandWidget,
+    collapseWidget: spotifyCollapseWidget,
+    togglePlay: spotifyTogglePlay, 
+    nextTrack: spotifyNextTrack, 
+    previousTrack: spotifyPreviousTrack,
+    searchTracks: spotifySearch,
+    playTrack: spotifyPlayTrack,
+  } = useSpotifyPlayer();
+
+  const [spotifyPulseData, setSpotifyPulseData] = useState<{ amplitude: number, frequencies: Uint8Array }>({
+    amplitude: 0,
+    frequencies: new Uint8Array(32)
+  });
+  const [spotifySearchQuery, setSpotifySearchQuery] = useState('');
+  const [spotifySearchResults, setSpotifySearchResults] = useState<any[]>([]);
+  const [spotifySearching, setSpotifySearching] = useState(false);
+  const spotifyWidgetRef = useRef<HTMLDivElement>(null);
   
   const [settings, setSettings] = useState<Settings>(() => {
     try {
@@ -69,6 +104,56 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMetricsOpen, setIsMetricsOpen] = useState(false);
   const [isVoiceWizardOpen, setIsVoiceWizardOpen] = useState(false);
+  const [isChatPanelOpen, setIsChatPanelOpen] = useState(false);
+
+  // API configuration and exhaustion levels
+  const [apiStatus, setApiStatus] = useState<any>(null);
+
+  const fetchApiStatus = useCallback(async () => {
+    try {
+      const response = await smartFetch("/api/api-status");
+      if (response.ok) {
+        const data = await response.json();
+        setApiStatus(data);
+      }
+    } catch (err) {
+      console.warn("[FRIDAY APP] Failed to fetch API key configurations:", err);
+    }
+  }, []);
+
+  const handleSaveApiKeys = useCallback(async (geminiKey: string, openaiKey: string) => {
+    try {
+      const response = await smartFetch("/api/save-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          geminiApiKey: geminiKey || undefined,
+          openaiApiKey: openaiKey || undefined
+        })
+      });
+      if (response.ok) {
+        await fetchApiStatus();
+      } else {
+        throw new Error(await response.text());
+      }
+    } catch (err) {
+      console.error("[FRIDAY APP] Failed to save keys:", err);
+      throw err;
+    }
+  }, [fetchApiStatus]);
+
+  useEffect(() => {
+    fetchApiStatus();
+    const apiInterval = setInterval(fetchApiStatus, 15000);
+    return () => clearInterval(apiInterval);
+  }, [fetchApiStatus]);
+
+  useEffect(() => {
+    if (isSettingsOpen) {
+      fetchApiStatus();
+    }
+  }, [isSettingsOpen, fetchApiStatus]);
+
   const [uplink, setUplink] = useState(1.2);
   const [coreTemp, setCoreTemp] = useState(34.2);
   const [metricsHistory, setMetricsHistory] = useState<{ time: string, load: number, temp: number, uplink: number }[]>([]);
@@ -143,7 +228,7 @@ export default function App() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const res = await fetch('https://f-r-i-d-a-y-8ixf.onrender.com/api/system-metrics');
+        const res = await smartFetch('/api/system-metrics');
         const m = await res.json();
         setSystemLoad(m.cpuPercent ?? 0);
         setCoreTemp(m.cpuTemp ?? 0);
@@ -160,6 +245,42 @@ export default function App() {
 
 
 
+  const handleChatPanelSendMessage = useCallback(async (text: string, attachment?: any) => {
+    setState('processing'); setStatus('PROCESSING_QUERY');
+    try {
+      const res = await smartFetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          deviceId: (window as any).fridayDeviceId,
+          attachment: attachment ? { base64: attachment.base64, mimeType: attachment.mimeType } : undefined
+        })
+      });
+      const data = await res.json();
+      const responseText = data.text || data.result?.message || (data.result?.ok ? "Mission objective complete." : "Execution failed.");
+      
+      if (responseText) {
+        setMessages(prev => [
+          ...prev, 
+          { role: 'user', text },
+          { role: 'assistant', text: responseText }
+        ]);
+        
+        speakAndIdle(responseText);
+        return responseText;
+      }
+      return null;
+    } catch (err) {
+      console.error(err);
+      setStatus('ERROR');
+      setState('idle');
+      return null;
+    } finally {
+      fetchApiStatus();
+    }
+  }, [speakAndIdle, fetchApiStatus]);
+
   // ── VOICE RESULT HANDLER — uses /transcribe result directly (no double-send!) ──
   const onVoiceResult = useCallback((data: TranscribeResult, wasManual: boolean) => {
     const { text, confidence, intent, result } = data;
@@ -173,10 +294,18 @@ export default function App() {
     const msg = result?.message || 'I didn\'t catch that. Try again.';
     setMessages(prev => [...prev, { role: 'assistant', text: msg }]);
 
-    // Trigger Electron virtual Spotify Window immediately if requested (voice pipeline support!)
-    if (result?.openSpotify && (window as any).friday && (window as any).friday.openSpotify) {
-      console.log("[FRIDAY React] Spawning Spotify Player window via voice event...");
-      (window as any).friday.openSpotify();
+    // Trigger Spotify OAuth if requested (voice pipeline support!)
+    if (result?.openSpotify) {
+      console.log("[FRIDAY React] Spotify authorization requested. Opening login link...");
+      getBackendBaseUrl().then(baseUrl => {
+        window.open(`${baseUrl}/spotify/login`, "_blank");
+      });
+    }
+
+    // Show Spotify widget when a play command is detected
+    if (intent?.intent === 'SPOTIFY' || intent?.intent?.startsWith?.('spotify') || 
+        (result?.message && (result.message.toLowerCase().includes('playing') || result.message.toLowerCase().includes('spotify')))) {
+      spotifyShowWidget();
     }
 
     // Update pending follow-up context
@@ -186,8 +315,13 @@ export default function App() {
       setPendingFollowUp(null);
     }
 
+    if (intent?.type === 'query') {
+      setIsChatPanelOpen(true);
+    }
+
+    fetchApiStatus();
     speakAndIdle(msg);
-  }, [speakAndIdle]);
+  }, [speakAndIdle, fetchApiStatus]);
 
   const { 
     data: voiceData, 
@@ -224,32 +358,68 @@ export default function App() {
     setMessages(prev => [...prev, { role: 'user', text }]);
     setState('processing'); setStatus('PROCESSING_QUERY');
     try {
-      const res = await smartFetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text })
-      });
+      let res;
+      if (pendingFollowUpRef.current) {
+        res = await smartFetch('/followup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            followUpContext: pendingFollowUpRef.current,
+            answer: text,
+            deviceId: (window as any).fridayDeviceId
+          })
+        });
+      } else {
+        res = await smartFetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            deviceId: (window as any).fridayDeviceId
+          })
+        });
+      }
+      
       const data = await res.json();
-      if (data.text) {
-        setMessages(prev => [...prev, { role: 'assistant', text: data.text }]);
+      const responseText = data.text || data.result?.message || (data.result?.ok ? "Mission objective complete." : "Execution failed.");
+      
+      if (responseText) {
+        setMessages(prev => [...prev, { role: 'assistant', text: responseText }]);
         
-        // Trigger Electron virtual Spotify Window immediately if requested (typed command support!)
-        if (data.result?.openSpotify && (window as any).friday && (window as any).friday.openSpotify) {
-          console.log("[FRIDAY React] Spawning Spotify Player window via text event...");
-          (window as any).friday.openSpotify();
+        const resultObj = data.result || data;
+        
+        // Trigger Spotify OAuth if requested (typed command support!)
+        if (resultObj.openSpotify) {
+          console.log("[FRIDAY React] Spotify authorization requested. Opening login link...");
+          getBackendBaseUrl().then(baseUrl => {
+            window.open(`${baseUrl}/spotify/login`, "_blank");
+          });
+        }
+
+        // Show Spotify widget when a Spotify command completes
+        if (resultObj.openSpotify || 
+            (responseText && (responseText.toLowerCase().includes('playing') || responseText.toLowerCase().includes('spotify')))) {
+          spotifyShowWidget();
         }
 
         // Update pending follow-up context
-        if (data.result?.followUp) {
-          setPendingFollowUp(data.result.followUp);
+        if (resultObj.followUp) {
+          setPendingFollowUp(resultObj.followUp);
         } else {
           setPendingFollowUp(null);
         }
 
-        speakAndIdle(data.text);
+        if (data.intent?.type === 'query') {
+          setIsChatPanelOpen(true);
+        }
+
+        speakAndIdle(responseText);
       } else { throw new Error('No response'); }
     } catch (err) { console.error(err); setStatus('ERROR'); setState('idle'); }
-  }, [speakAndIdle]);
+    finally {
+      fetchApiStatus();
+    }
+  }, [speakAndIdle, fetchApiStatus]);
 
   const toggleListening = () => {
     if (state === 'idle') {
@@ -259,11 +429,30 @@ export default function App() {
     }
   };
 
+  // Simulate active music pulse when Spotify is playing
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (spotifyState.isPlaying && state === 'idle') {
+      interval = setInterval(() => {
+        const amp = 0.3 + Math.random() * 0.4;
+        const freqs = new Uint8Array(32);
+        for (let i = 0; i < 32; i++) {
+          freqs[i] = Math.round(Math.random() * 255 * (amp * Math.random()));
+        }
+        setSpotifyPulseData({ amplitude: amp, frequencies: freqs });
+      }, 100);
+    } else {
+      setSpotifyPulseData({ amplitude: 0, frequencies: new Uint8Array(32) });
+    }
+    return () => { if (interval) clearInterval(interval); };
+  }, [spotifyState.isPlaying, state]);
+
   const activeVoiceData = useMemo(() => {
     if (state === 'speaking') return fakeData;
     if (state === 'listening') return voiceData;
+    if (spotifyState.isPlaying && state === 'idle') return spotifyPulseData;
     return { amplitude: 0, frequencies: new Uint8Array(32) };
-  }, [state, voiceData, fakeData]);
+  }, [state, voiceData, fakeData, spotifyState.isPlaying, spotifyPulseData]);
 
   return (
     <div className="relative w-screen h-screen flex flex-col items-center justify-center bg-[#0d0000]/40 backdrop-blur-xl text-orange-500 overflow-hidden select-none" style={{ '--accent': settings.accentColor } as any}>
@@ -300,21 +489,32 @@ export default function App() {
         showGeodata={settings.showGeodata}
         onMetricsClick={() => setIsMetricsOpen(true)}
         showMetricsBtn={settings.showMetricsBtn}
+        apiStatus={apiStatus}
       />
 
       <QuickAccessTray accentColor={settings.accentColor} />
       
 
 
-      {/* Settings Toggle on Right */}
-      <div className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 z-30 flex flex-col md:flex-row items-center gap-4">
+      {/* HUD Panel Toggles on Right */}
+      <div className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-4 pointer-events-auto">
         <button 
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-2 md:p-3 border transition-all duration-500 rounded-lg group bg-transparent border-white/5 hover:border-white/20"
-                style={{ color: settings.accentColor + '99' }}
-            >
-                <SettingsIcon size={16} className="group-hover:rotate-90 transition-transform" />
-            </button>
+          onClick={() => setIsChatPanelOpen(true)}
+          className="p-2 md:p-3 border transition-all duration-500 rounded-lg group bg-transparent border-white/5 hover:border-white/20 cursor-pointer"
+          style={{ color: settings.accentColor + '99', borderColor: settings.accentColor + '1a' }}
+          title="Open Intelligence Chat"
+        >
+          <MessageSquare size={16} className="group-hover:scale-110 transition-transform" />
+        </button>
+
+        <button 
+          onClick={() => setIsSettingsOpen(true)}
+          className="p-2 md:p-3 border transition-all duration-500 rounded-lg group bg-transparent border-white/5 hover:border-white/20 cursor-pointer"
+          style={{ color: settings.accentColor + '99', borderColor: settings.accentColor + '1a' }}
+          title="System Settings"
+        >
+          <SettingsIcon size={16} className="group-hover:rotate-90 transition-transform" />
+        </button>
       </div>
 
       <SettingsDrawer 
@@ -326,6 +526,8 @@ export default function App() {
           setIsSettingsOpen(false);
           setIsVoiceWizardOpen(true);
         }}
+        apiStatus={apiStatus}
+        onSaveKeys={handleSaveApiKeys}
       />
 
       <VoiceProfileWizard 
@@ -458,6 +660,35 @@ export default function App() {
             </div>
         </div>
       </div>
+
+      <InteractiveChatPanel
+        isOpen={isChatPanelOpen}
+        onClose={() => setIsChatPanelOpen(false)}
+        accentColor={settings.accentColor}
+        voiceState={voiceState === 'listening' ? 'listening' : voiceState === 'processing' ? 'processing' : 'idle'}
+        startRecording={startRecording}
+        stopRecording={stopRecording}
+        onSendMessage={handleChatPanelSendMessage}
+        initialMessages={messages}
+        apiStatus={apiStatus}
+      />
+
+      {/* ═══ CINEMATIC FRIDAY AUDIO DECK WIDGET ═══ */}
+      <SpotifyWidget
+        spotifyState={spotifyState}
+        widgetMode={spotifyWidgetMode}
+        accentColor={settings.accentColor}
+        onMinimize={spotifyMinimizeWidget}
+        onExpand={spotifyExpandWidget}
+        onCollapse={spotifyCollapseWidget}
+        onHide={spotifyHideWidget}
+        onShow={() => spotifyShowWidget()}
+        onTogglePlay={spotifyTogglePlay}
+        onNext={spotifyNextTrack}
+        onPrev={spotifyPreviousTrack}
+        onPlayTrack={spotifyPlayTrack}
+        onSearch={spotifySearch}
+      />
 
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes scan {

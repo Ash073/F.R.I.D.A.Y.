@@ -16,6 +16,7 @@ import {
     MessageSquare,
     AppWindow
 } from 'lucide-react';
+import { smartFetch } from '../hooks/useFridayVoicePipeline';
 
 interface AppConfig {
     id: string;
@@ -145,7 +146,7 @@ export default function QuickAccessTray({ accentColor = '#ff8c00' }: { accentCol
                                 (window as any).friday.launchApp(app.path);
                             } else {
                                 // Fallback via Node backend server API
-                                fetch('http://localhost:3131/api/launch-app', {
+                                smartFetch('/api/launch-app', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ path: app.path })
@@ -214,7 +215,7 @@ export default function QuickAccessTray({ accentColor = '#ff8c00' }: { accentCol
                 if ((window as any).friday?.launchApp) {
                     (window as any).friday.launchApp(path);
                 } else {
-                    fetch('http://localhost:3131/api/launch-app', {
+                    smartFetch('/api/launch-app', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ path: path })

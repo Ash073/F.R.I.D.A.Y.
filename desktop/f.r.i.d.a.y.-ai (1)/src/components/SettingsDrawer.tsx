@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Palette, Settings2, Sliders, Mic } from 'lucide-react';
+import { X, Palette, Settings2, Sliders, Mic, KeyRound } from 'lucide-react';
 import { DEFAULT_SETTINGS } from '../App';
 
 interface VoiceProfile {
@@ -27,12 +27,25 @@ interface Settings {
     voiceProfile?: VoiceProfile;
 }
 
+interface ApiStatusItem {
+    configured: boolean;
+    exhausted: boolean;
+    masked: string | null;
+}
+
+interface ApiStatus {
+    gemini: ApiStatusItem;
+    openai: ApiStatusItem;
+}
+
 interface SettingsDrawerProps {
     isOpen: boolean;
     onClose: () => void;
     settings: Settings;
     onUpdate: (newSettings: Settings) => void;
     onOpenVoiceWizard?: () => void;
+    apiStatus: ApiStatus | null;
+    onSaveKeys: (geminiKey: string, openaiKey: string) => Promise<void>;
 }
 
 const COLORS = [
@@ -57,8 +70,31 @@ export default function SettingsDrawer({
     onClose, 
     settings, 
     onUpdate,
-    onOpenVoiceWizard
+    onOpenVoiceWizard,
+    apiStatus,
+    onSaveKeys
 }: SettingsDrawerProps) {
+    const [localGeminiKey, setLocalGeminiKey] = useState('');
+    const [localOpenaiKey, setLocalOpenaiKey] = useState('');
+    const [isSavingKeys, setIsSavingKeys] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) {
+            setLocalGeminiKey('');
+            setLocalOpenaiKey('');
+        }
+    }, [isOpen]);
+
+    const handleSaveApiKeys = async () => {
+        setIsSavingKeys(true);
+        try {
+            await onSaveKeys(localGeminiKey, localOpenaiKey);
+        } catch (err) {
+            console.error("Failed to save keys:", err);
+        } finally {
+            setIsSavingKeys(false);
+        }
+    };
 
     return (
         <AnimatePresence>
@@ -240,6 +276,79 @@ export default function SettingsDrawer({
                                             ⚙️ LAUNCH VOICE TRAINING WIZARD
                                         </button>
                                     </div>
+                                </div>
+                            </section>
+
+                            {/* AI Core API Credentials */}
+                            <section className="mt-4 pt-4 border-t border-orange-500/10">
+                                <div className="flex items-center gap-2 text-[10px] mb-4 tracking-tighter font-mono" style={{ color: settings.accentColor + '66' }}>
+                                    <KeyRound size={12} />
+                                    <span>AI_CORE_API_CREDENTIALS</span>
+                                </div>
+                                <div className="flex flex-col gap-4">
+                                    <div className="flex flex-col gap-1.5">
+                                        <div className="flex justify-between items-center text-[8px] font-mono tracking-widest uppercase">
+                                            <span style={{ color: settings.accentColor + '99' }}>Gemini API Slot</span>
+                                            {apiStatus?.gemini?.exhausted ? (
+                                                <span className="text-red-500 font-bold">⚠️ EXHAUSTED</span>
+                                            ) : apiStatus?.gemini?.configured ? (
+                                                <span className="text-green-500">ACTIVE</span>
+                                            ) : (
+                                                <span style={{ color: settings.accentColor + '44' }}>EMPTY</span>
+                                            )}
+                                        </div>
+                                        <input
+                                            type="password"
+                                            value={localGeminiKey}
+                                            onChange={(e) => setLocalGeminiKey(e.target.value)}
+                                            placeholder={apiStatus?.gemini?.masked || "ENTER GEMINI API KEY..."}
+                                            className="w-full bg-black/60 border text-[10px] font-mono px-3 py-2 outline-none"
+                                            style={{ borderColor: settings.accentColor + '33', color: settings.accentColor }}
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-col gap-1.5">
+                                        <div className="flex justify-between items-center text-[8px] font-mono tracking-widest uppercase">
+                                            <span style={{ color: settings.accentColor + '99' }}>OpenAI API Slot</span>
+                                            {apiStatus?.openai?.exhausted ? (
+                                                <span className="text-red-500 font-bold">⚠️ EXHAUSTED</span>
+                                            ) : apiStatus?.openai?.configured ? (
+                                                <span className="text-green-500">ACTIVE</span>
+                                            ) : (
+                                                <span style={{ color: settings.accentColor + '44' }}>EMPTY</span>
+                                            )}
+                                        </div>
+                                        <input
+                                            type="password"
+                                            value={localOpenaiKey}
+                                            onChange={(e) => setLocalOpenaiKey(e.target.value)}
+                                            placeholder={apiStatus?.openai?.masked || "ENTER OPENAI API KEY..."}
+                                            className="w-full bg-black/60 border text-[10px] font-mono px-3 py-2 outline-none"
+                                            style={{ borderColor: settings.accentColor + '33', color: settings.accentColor }}
+                                        />
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveApiKeys}
+                                        disabled={isSavingKeys}
+                                        className="w-full py-2 border text-[9px] font-mono font-bold tracking-widest transition-all uppercase rounded cursor-pointer mt-1"
+                                        style={{ 
+                                            borderColor: settings.accentColor + '66', 
+                                            color: '#000',
+                                            backgroundColor: settings.accentColor
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = 'transparent';
+                                            e.currentTarget.style.color = settings.accentColor;
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = settings.accentColor;
+                                            e.currentTarget.style.color = '#000';
+                                        }}
+                                    >
+                                        {isSavingKeys ? "💾 SYSTEM SYNCING..." : "💾 SAVE API CREDENTIALS"}
+                                    </button>
                                 </div>
                             </section>
 

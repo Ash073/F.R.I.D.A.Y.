@@ -85,7 +85,7 @@ const APP_FOLLOW_UPS = {
   },
   "spotify": {
     question: "What do you want to play on Spotify?",
-    handler: async (answer) => {
+    handler: async (answer, deviceId) => {
       const a = answer.toLowerCase().trim();
       if (a === "skip" || a === "no" || a === "just open it" || a === "nothing") {
         return { ok: true, message: "Opening Spotify on F.R.I.D.A.Y.", openSpotify: true };
@@ -94,7 +94,7 @@ const APP_FOLLOW_UPS = {
       const { execute } = require("./executor");
       const playResult = await execute({
         intent: "spotify_play",
-        params: { query: answer.trim() }
+        params: { query: answer.trim(), deviceId }
       });
       return playResult;
     }
@@ -185,7 +185,7 @@ async function handleOpenApp({ app }) {
 /**
  * Handle the follow-up answer for an app
  */
-async function handleFollowUp(followUpContext, answer) {
+async function handleFollowUp(followUpContext, answer, deviceId) {
   const appKey = followUpContext.app;
   const followUp = APP_FOLLOW_UPS[appKey];
 
@@ -195,8 +195,8 @@ async function handleFollowUp(followUpContext, answer) {
     return { ok: true, message: `Opening ${followUpContext.appName}.` };
   }
 
-  console.log(`[FRIDAY] Follow-up for ${followUpContext.appName}: "${answer}"`);
-  return await followUp.handler(answer);
+  console.log(`[FRIDAY] Follow-up for ${followUpContext.appName}: "${answer}" (Device: ${deviceId})`);
+  return await followUp.handler(answer, deviceId);
 }
 
 async function handleCloseApp({ app }) {

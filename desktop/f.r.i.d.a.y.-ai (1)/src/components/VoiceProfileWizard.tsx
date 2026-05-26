@@ -103,7 +103,7 @@ export default function VoiceProfileWizard({
             const source = ctx.createMediaStreamSource(stream);
 
             const analyser = ctx.createAnalyser();
-            analyser.fftSize = 256;
+            analyser.fftSize = 1024;
             analyserRef.current = analyser;
             source.connect(analyser);
 
@@ -315,7 +315,7 @@ export default function VoiceProfileWizard({
 
     const handleSave = () => {
         // Compile multi-register profile into boundary ranges
-        const s = Object.values(samples);
+        const s = Object.values(samples) as VoiceSample[];
         if (s.length < 3) return;
 
         const pitches = s.map(x => x.pitch);
@@ -515,7 +515,7 @@ export default function VoiceProfileWizard({
                                         <div className="flex flex-col gap-1 p-3 rounded bg-white/5">
                                             <span className="text-white/40 text-[8px]">Timbre Centroid</span>
                                             <span className="text-white font-bold" style={{ color: accentColor }}>
-                                                {Math.round(Object.values(samples).reduce((a,b)=>a+b.centroid,0)/3)} Hz
+                                                {Math.round((Object.values(samples) as VoiceSample[]).reduce((a,b)=>a+b.centroid,0)/3)} Hz
                                             </span>
                                         </div>
                                     </div>
@@ -525,7 +525,7 @@ export default function VoiceProfileWizard({
                                         <div>
                                             <strong>NEURAL VOICE LOCK ENVELOPE GENERATED SUCCESSFULLY.</strong>
                                             <p className="mt-1 lowercase leading-tight">
-                                                Your vocal register covers pitches from {Math.min(...Object.values(samples).map(x=>x.pitch))}hz to {Math.max(...Object.values(samples).map(x=>x.pitch))}hz. The system will filter out foreign signatures using this boundary.
+                                                Your vocal register covers pitches from {Math.min(...(Object.values(samples) as VoiceSample[]).map(x=>x.pitch))}hz to {Math.max(...(Object.values(samples) as VoiceSample[]).map(x=>x.pitch))}hz. The system will filter out foreign signatures using this boundary.
                                             </p>
                                         </div>
                                     </div>

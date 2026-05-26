@@ -1,0 +1,572 @@
+<!-- c:\Users\Sayyed Ashif\Downloads\FRIDAY\friday\desktop\src\voiceEnrollment.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>F.R.I.D.A.Y. - Voice Enrollment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background: #0d0000;
+      color: #ffffff;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 40px 30px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 106, 0, 0.3);
+      position: relative;
+    }
+
+    /* Cinematic Scanlines */
+    .scanlines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 999;
+      opacity: 0.08;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 3px, rgba(0, 0, 0, 0.4) 3px, rgba(0, 0, 0, 0.4) 4px
+      );
+    }
+
+    /* Reticle markings */
+    body::before, body::after {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-color: #ff6a00;
+      border-style: solid;
+      pointer-events: none;
+    }
+    body::before { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
+    body::after { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
+
+    .bottom-reticles::before, .bottom-reticles::after {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-color: #ff6a00;
+      border-style: solid;
+      pointer-events: none;
+      bottom: 10px;
+    }
+    .bottom-reticles::before { left: 10px; border-width: 0 0 2px 2px; }
+    .bottom-reticles::after { right: 10px; border-width: 0 2px 2px 0; }
+
+    /* Header Styling */
+    header {
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 0.25em;
+      color: #ff6a00;
+      text-shadow: 0 0 15px rgba(255, 106, 0, 0.6);
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.6);
+      letter-spacing: 0.05em;
+      max-width: 320px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    /* Status Ring */
+    .status-ring-container {
+      position: relative;
+      width: 160px;
+      height: 160px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 20px 0;
+    }
+
+    .status-ring {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 106, 0, 0.15);
+      transition: all 0.3s ease;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    }
+
+    .status-ring.pulsing {
+      border-color: #ff6a00;
+      animation: pulseGlow 1.2s infinite ease-in-out;
+    }
+
+    .status-ring.complete {
+      border-color: #00ffcc;
+      box-shadow: 0 0 20px rgba(0, 255, 204, 0.4);
+    }
+
+    /* Visualizer inside status ring */
+    .ring-content {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100px;
+      height: 100px;
+      z-index: 2;
+    }
+
+    .checkmark {
+      display: none;
+      width: 50px;
+      height: 50px;
+      stroke: #00ffcc;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      filter: drop-shadow(0 0 8px rgba(0, 255, 204, 0.6));
+    }
+
+    .waveform {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      width: 80px;
+      height: 40px;
+    }
+
+    .bar {
+      width: 3px;
+      height: 5px;
+      background: #ff6a00;
+      border-radius: 1px;
+      transition: height 0.08s ease;
+    }
+
+    /* Pulse effect */
+    @keyframes pulseGlow {
+      0% {
+        transform: scale(1);
+        box-shadow: 0 0 10px rgba(255, 106, 0, 0.2);
+      }
+      50% {
+        transform: scale(1.04);
+        box-shadow: 0 0 25px rgba(255, 106, 0, 0.5);
+      }
+      100% {
+        transform: scale(1);
+        box-shadow: 0 0 10px rgba(255, 106, 0, 0.2);
+      }
+    }
+
+    /* Instructions Panel */
+    .instruction-panel {
+      text-align: center;
+      background: rgba(255, 106, 0, 0.03);
+      border: 1px solid rgba(255, 106, 0, 0.1);
+      padding: 16px 20px;
+      border-radius: 4px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+
+    .step-indicator {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: #ff6a00;
+      margin-bottom: 8px;
+    }
+
+    .instruction-text {
+      font-size: 13px;
+      color: #ffffff;
+      line-height: 1.6;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    /* Action elements */
+    .actions-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+      width: 100%;
+    }
+
+    /* Record Button */
+    #enroll-record-btn {
+      border: 1px solid #ff6a00;
+      background: transparent;
+      color: #ff6a00;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      padding: 14px 36px;
+      border-radius: 2px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 10px rgba(255, 106, 0, 0.1);
+    }
+
+    #enroll-record-btn:hover {
+      background: rgba(255, 106, 0, 0.05);
+      box-shadow: 0 0 15px rgba(255, 106, 0, 0.25);
+    }
+
+    #enroll-record-btn:active, #enroll-record-btn.recording {
+      background: rgba(255, 106, 0, 0.2);
+      color: #ffffff;
+      border-color: #ff6a00;
+      box-shadow: 0 0 20px rgba(255, 106, 0, 0.5);
+    }
+
+    #enroll-record-btn.recorded {
+      color: #00ffcc;
+      border-color: #00ffcc;
+      background: rgba(0, 255, 204, 0.05);
+      box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
+    }
+
+    /* Progress bar */
+    .progress-container {
+      width: 100%;
+      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .progress-text {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.4);
+      letter-spacing: 0.05em;
+    }
+
+    .progress-bar-bg {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      width: 0%;
+      height: 100%;
+      background: #ff6a00;
+      box-shadow: 0 0 8px #ff6a00;
+      border-radius: 2px;
+      transition: width 0.4s cubic-bezier(0.1, 0.8, 0.25, 1);
+    }
+
+    /* Complete Button */
+    #enroll-complete-btn {
+      display: none;
+      border: 1px solid #00ffcc;
+      background: transparent;
+      color: #00ffcc;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      padding: 14px 28px;
+      border-radius: 2px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.3s ease;
+      box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
+      text-transform: uppercase;
+      animation: completePulse 1.5s infinite alternate;
+    }
+
+    @keyframes completePulse {
+      0% { box-shadow: 0 0 10px rgba(0, 255, 204, 0.2); }
+      100% { box-shadow: 0 0 25px rgba(0, 255, 204, 0.6); }
+    }
+
+    #enroll-complete-btn:hover {
+      background: rgba(0, 255, 204, 0.1);
+      color: #ffffff;
+    }
+
+    /* Reset link */
+    #reset-link {
+      font-size: 9px;
+      color: rgba(255, 255, 255, 0.3);
+      text-decoration: none;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      transition: color 0.2s ease;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    #reset-link:hover {
+      color: #ff6a00;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="scanlines"></div>
+  <div class="bottom-reticles"></div>
+
+  <!-- Header -->
+  <header>
+    <h1>F.R.I.D.A.Y.</h1>
+    <div class="subtitle">Register your voice signature to activate owner authentication</div>
+  </header>
+
+  <!-- Status ring -->
+  <div class="status-ring-container">
+    <div class="status-ring" id="ring"></div>
+    <div class="ring-content">
+      <!-- Waveform Animation -->
+      <div class="waveform" id="waveform">
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+      </div>
+      <!-- Checkmark -->
+      <svg class="checkmark" id="checkmark" viewBox="0 0 52 52">
+        <circle cx="26" cy="26" r="25" stroke="#00ffcc" stroke-width="2" fill="none"/>
+        <path d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Instructions Panel -->
+  <div class="instruction-panel">
+    <div class="step-indicator" id="step-lbl">STEP 1 of 3</div>
+    <div class="instruction-text" id="instruction-lbl">Say the phrase: HEY FRIDAY — I AM ONLINE</div>
+  </div>
+
+  <!-- Actions Panel -->
+  <div class="actions-panel">
+    <!-- Record button -->
+    <button id="enroll-record-btn">HOLD TO RECORD</button>
+
+    <!-- Complete button -->
+    <button id="enroll-complete-btn">ACTIVATE VOICE AUTHENTICATION</button>
+
+    <!-- Progress bar -->
+    <div class="progress-container">
+      <div class="progress-text" id="progress-lbl">0 of 3 samples recorded</div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+    </div>
+
+    <!-- Reset Link -->
+    <a id="reset-link">Reset voice profile</a>
+  </div>
+
+  <script src="./utils/voiceEnrollment.js"></script>
+  <script>
+    (function() {
+      'use strict';
+
+      const recordBtn = document.getElementById('enroll-record-btn');
+      const completeBtn = document.getElementById('enroll-complete-btn');
+      const resetLink = document.getElementById('reset-link');
+      const stepLbl = document.getElementById('step-lbl');
+      const instructionLbl = document.getElementById('instruction-lbl');
+      const progressLbl = document.getElementById('progress-lbl');
+      const progressFill = document.getElementById('progress-fill');
+      const ring = document.getElementById('ring');
+      const waveform = document.getElementById('waveform');
+      const checkmark = document.getElementById('checkmark');
+      const bars = document.querySelectorAll('.bar');
+
+      const phrases = [
+        "Say the phrase: HEY FRIDAY — I AM ONLINE",
+        "Say the phrase: HEY FRIDAY — SYSTEMS CHECK",
+        "Say the phrase: HEY FRIDAY — INITIATE SEQUENCE"
+      ];
+
+      let isHolding = false;
+      let recordStart = 0;
+      let audioAnimInterval = null;
+
+      // Initialize audio device
+      window.fridayVoiceEnrollment.initEnrollmentAudio().then(success => {
+        if (!success) {
+          alert("Microphone access is required for F.R.I.D.A.Y. Voice Enrollment.");
+          instructionLbl.textContent = "Error: Microphone access denied.";
+        }
+      });
+
+      // Visual waveform animation helper during recording
+      function startWaveformAnim() {
+        if (audioAnimInterval) clearInterval(audioAnimInterval);
+        audioAnimInterval = setInterval(() => {
+          bars.forEach(bar => {
+            // Simulated voice waveform bounce
+            const height = 5 + Math.floor(Math.random() * 32);
+            bar.style.height = height + 'px';
+          });
+        }, 80);
+      }
+
+      function stopWaveformAnim() {
+        if (audioAnimInterval) {
+          clearInterval(audioAnimInterval);
+          audioAnimInterval = null;
+        }
+        bars.forEach(bar => {
+          bar.style.height = '5px';
+        });
+      }
+
+      // Record Trigger - Mouse / Touch Hold Handlers
+      function handleHoldStart(e) {
+        if (e) e.preventDefault();
+        if (isHolding || window.fridayVoiceEnrollment.currentStep() >= 3) return;
+
+        isHolding = true;
+        recordStart = Date.now();
+        recordBtn.textContent = "RECORDING...";
+        recordBtn.classList.add('recording');
+        ring.classList.add('pulsing');
+        
+        startWaveformAnim();
+        window.fridayVoiceEnrollment.startRecording();
+      }
+
+      function handleHoldEnd(e) {
+        if (e) e.preventDefault();
+        if (!isHolding) return;
+
+        isHolding = false;
+        const elapsed = Date.now() - recordStart;
+
+        stopWaveformAnim();
+        ring.classList.remove('pulsing');
+
+        if (elapsed < 1500) {
+          // Minimum time gate failed
+          window.fridayVoiceEnrollment.stopRecording();
+          // Drop last sample chunk and show warning
+          recordBtn.textContent = "HOLD TO RECORD";
+          recordBtn.classList.remove('recording');
+          alert("Recording must be at least 1.5 seconds. Please hold and speak the full phrase.");
+          return;
+        }
+
+        recordBtn.textContent = "PROCESSING...";
+        recordBtn.classList.remove('recording');
+
+        window.fridayVoiceEnrollment.stopRecording();
+      }
+
+      recordBtn.addEventListener('mousedown', handleHoldStart);
+      recordBtn.addEventListener('mouseup', handleHoldEnd);
+      recordBtn.addEventListener('mouseleave', handleHoldEnd);
+
+      // Support Touch events for modern displays
+      recordBtn.addEventListener('touchstart', handleHoldStart);
+      recordBtn.addEventListener('touchend', handleHoldEnd);
+
+      // Listen for step progression updates
+      // We can poll state periodically or override the UI methods dynamically
+      // Let's hook into the processRecordedSample UI updates by wrapping or checking window variables!
+      const originalProcess = window.fridayVoiceEnrollment.processRecordedSample;
+      window.fridayVoiceEnrollment.processRecordedSample = async function() {
+        // Run original logic
+        if (typeof originalProcess === 'function') {
+          await originalProcess.apply(this, arguments);
+        }
+
+        const currentStep = window.fridayVoiceEnrollment.currentStep();
+        const sampleCount = 3;
+
+        // Update progress bar
+        const percentage = (currentStep / sampleCount) * 100;
+        progressFill.style.width = percentage + '%';
+        progressLbl.textContent = `${currentStep} of ${sampleCount} samples recorded`;
+
+        if (currentStep < sampleCount) {
+          recordBtn.textContent = "RECORDED ✓";
+          recordBtn.classList.add('recorded');
+          
+          setTimeout(() => {
+            recordBtn.textContent = "HOLD TO RECORD";
+            recordBtn.classList.remove('recorded');
+            stepLbl.textContent = `STEP ${currentStep + 1} of 3`;
+            instructionLbl.textContent = phrases[currentStep];
+          }, 800);
+        } else {
+          // All samples completed
+          recordBtn.textContent = "RECORDED ✓";
+          recordBtn.classList.add('recorded');
+          recordBtn.style.display = 'none';
+          
+          // Complete aesthetics
+          ring.classList.add('complete');
+          waveform.style.display = 'none';
+          checkmark.style.display = 'block';
+
+          stepLbl.textContent = "CALIBRATION COMPLETE";
+          instructionLbl.textContent = "Acoustic signature mapped successfully. F.R.I.D.A.Y. is ready.";
+          
+          // Show complete button
+          completeBtn.style.display = 'block';
+        }
+      };
+
+      // Complete Action
+      completeBtn.addEventListener('click', () => {
+        window.fridayVoiceEnrollment.saveVoiceProfile();
+        // Close window via Electron IPC
+        if (window.electronAPI) {
+          window.close();
+        } else {
+          alert("Acoustic Signature Activated! (Browser mock)");
+        }
+      });
+
+      // Reset Action
+      resetLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.fridayVoiceEnrollment.clearVoiceProfile();
+        window.location.reload();
+      });
+    })();
+  </script>
+</body>
+</html>

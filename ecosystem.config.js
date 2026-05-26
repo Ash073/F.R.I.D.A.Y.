@@ -1,18 +1,24 @@
 // c:\Users\Sayyed Ashif\Downloads\FRIDAY\friday\ecosystem.config.js
-/**
- * PM2 Application Configuration
- * Deploys the local F.R.I.D.A.Y. edge server with proper environments.
- */
 
 module.exports = {
-  apps: [{
-    name: 'friday-local',
-    script: 'backend/server.js',
-    watch: false,
-    env: {
-      PORT: 8888,
-      ENABLE_WHISPER: 'true',
-      NODE_ENV: 'development'
+  apps: [
+    {
+      name: 'friday-backend',
+      script: 'server.js',
+      cwd: './backend',
+      watch: false,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 3000,
+      env: {
+        NODE_ENV: 'production',
+        PORT: 8888,
+        ENABLE_WHISPER: 'true'
+      },
+      error_file: '../logs/friday-error.log',
+      out_file: '../logs/friday-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      time: true
     }
-  }]
-};
+  ]
+}
