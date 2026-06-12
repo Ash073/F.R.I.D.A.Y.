@@ -12,6 +12,8 @@ let mediaStream = null
 let scriptProcessor = null
 let enrollmentChunks = []
 let enrolledSamples = []
+let enrolledPitches = []
+let enrolledCentroids = []
 let currentStep = 0
 let isRecording = false
 let safetyTimeout = null
@@ -123,6 +125,8 @@ async function processRecordedSample() {
     
     const featureVector = extractVoiceFeatures(pcmSamples);
     enrolledSamples.push(featureVector);
+    if (featureVector.rawPitch > 0) enrolledPitches.push(featureVector.rawPitch);
+    if (featureVector.rawCentroid > 0) enrolledCentroids.push(featureVector.rawCentroid);
     currentStep++;
 
     console.log(`[FRIDAY VOICE] Sample ${currentStep} of ${SAMPLE_COUNT} enrolled successfully.`);
@@ -137,6 +141,8 @@ async function processRecordedSample() {
  * @returns {Float32Array} Normalized feature vector.
  */
 function extractVoiceFeatures(pcmSamples, analyserOverride = null) {
+  let rawCentroidValue = 1400; // default fallback
+  let rawPitchValue = 145;     // default fallback
   const segmentCount = 10;
   const segmentLength = Math.floor(pcmSamples.length / segmentCount);
 
@@ -216,6 +222,7 @@ function extractVoiceFeatures(pcmSamples, analyserOverride = null) {
     }
 
     const rawCentroid = totalMagnitude > 0 ? (weightedSum / totalMagnitude) : 1200;
+    rawCentroidValue = rawCentroid;
     spectralCentroid = Math.max(0, Math.min(rawCentroid / 8000, 1.0));
   }
 
@@ -256,6 +263,7 @@ function extractVoiceFeatures(pcmSamples, analyserOverride = null) {
     
     if (bestLag > 0) {
       const freq = 16000 / bestLag;
+      rawPitchValue = freq;
       // Normalize relative to typical voice range (80Hz to 300Hz)
       const normPitch = (freq - 80) / (300 - 80);
       pitchEstimate = Math.max(0, Math.min(normPitch, 1.0));
@@ -284,6 +292,8 @@ function extractVoiceFeatures(pcmSamples, analyserOverride = null) {
   // Mixing and scaling different physical metrics via a global min-max is mathematically flawed
   // and breaks cosine similarity stability.
   const featureVector = new Float32Array(rawFeatures);
+  featureVector.rawPitch = rawPitchValue;
+  featureVector.rawCentroid = rawCentroidValue;
 
   console.log('[FRIDAY VOICE] Extracted voice feature signature vector (22 points).');
   return featureVector;
@@ -323,12 +333,22 @@ function saveVoiceProfile() {
     stdDevVector[i] = Math.sqrt(sumSqDiff / SAMPLE_COUNT);
   }
 
+  const pitchMin = enrolledPitches.length > 0 ? Math.min(...enrolledPitches) : 130;
+  const pitchMax = enrolledPitches.length > 0 ? Math.max(...enrolledPitches) : 160;
+  const pitchAvg = enrolledPitches.length > 0 ? enrolledPitches.reduce((a, b) => a + b, 0) / enrolledPitches.length : 145;
+  const centroidAvg = enrolledCentroids.length > 0 ? enrolledCentroids.reduce((a, b) => a + b, 0) / enrolledCentroids.length : 1400;
+
   const profile = {
-    version: 1,
+    version: 2,
     createdAt: Date.now(),
     featureVector: Array.from(averagedVector),
     toleranceVector: Array.from(stdDevVector),
-    sampleCount: SAMPLE_COUNT
+    sampleCount: SAMPLE_COUNT,
+    pitchMin: Math.round(pitchMin),
+    pitchMax: Math.round(pitchMax),
+    pitchAvg: Math.round(pitchAvg),
+    centroidAvg: Math.round(centroidAvg),
+    isCalibrated: true
   };
 
   // Save to LocalStorage
@@ -390,6 +410,8 @@ async function hasVoiceProfile() {
 function clearVoiceProfile() {
   localStorage.removeItem(PROFILE_KEY);
   enrolledSamples = [];
+  enrolledPitches = [];
+  enrolledCentroids = [];
   currentStep = 0;
 
   if (window.electronAPI?.clearVoiceProfile) {

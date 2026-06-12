@@ -126,43 +126,38 @@ export default function VoiceProfileWizard({
     // Autocorrelation pitch detector
     const detectPitch = (buffer: Float32Array, sampleRate: number) => {
         const SIZE = buffer.length;
+        
         let sum = 0;
         for (let i = 0; i < SIZE; i++) sum += buffer[i] * buffer[i];
         const rms = Math.sqrt(sum / SIZE);
-        if (rms < 0.008) return -1;
+        if (rms < 0.01) return -1; // Ignore silence or low energy frames
 
-        let r1 = 0, r2 = SIZE - 1;
-        const thres = 0.15;
-        for (let i = 0; i < SIZE / 2; i++) {
-            if (Math.abs(buffer[i]) < thres) { r1 = i; break; }
-        }
-        for (let i = SIZE - 1; i >= SIZE / 2; i--) {
-            if (Math.abs(buffer[i]) < thres) { r2 = i; break; }
-        }
-        const buf = buffer.subarray(r1, r2);
-        const len = buf.length;
-        if (len < 64) return -1;
+        // Bounded lag range for human voice (70Hz - 400Hz at 16000Hz sample rate)
+        const minLag = Math.floor(sampleRate / 400); // 40 samples at 16kHz
+        const maxLag = Math.floor(sampleRate / 70);  // 228 samples at 16kHz
+        
+        let bestLag = -1;
+        let maxCorrelation = -Infinity;
 
-        const c = new Float32Array(len);
-        for (let i = 0; i < len; i++) {
-            for (let j = 0; j < len - i; j++) {
-                c[i] = c[i] + buf[j] * buf[j + i];
+        for (let lag = minLag; lag <= maxLag; lag++) {
+            let correlation = 0;
+            let energy = 0;
+            
+            for (let i = 0; i < SIZE - lag; i++) {
+                correlation += buffer[i] * buffer[i + lag];
+                energy += buffer[i + lag] * buffer[i + lag];
+            }
+            
+            const normalizedCorrelation = energy > 0 ? correlation / Math.sqrt(energy) : correlation;
+            
+            if (normalizedCorrelation > maxCorrelation) {
+                maxCorrelation = normalizedCorrelation;
+                bestLag = lag;
             }
         }
 
-        let d = 0;
-        while (c[d] > c[d + 1]) d++;
-        let maxval = -1, maxpos = -1;
-        for (let i = d; i < len / 2; i++) {
-            if (c[i] > maxval) {
-                maxval = c[i];
-                maxpos = i;
-            }
-        }
-
-        let T0 = maxpos;
-        if (T0 > 0) {
-            return sampleRate / T0;
+        if (bestLag > 0 && maxCorrelation > 0.4) {
+            return sampleRate / bestLag;
         }
         return -1;
     };

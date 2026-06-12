@@ -101,6 +101,35 @@ export default function App() {
     } catch {}
   }, [settings]);
 
+  // Synchronize Voice Profile from Electron on startup
+  useEffect(() => {
+    if ((window as any).electronAPI && typeof (window as any).electronAPI.loadVoiceProfile === 'function') {
+      (window as any).electronAPI.loadVoiceProfile().then((profileJSON: string | null) => {
+        if (profileJSON) {
+          try {
+            const profile = JSON.parse(profileJSON);
+            if (profile && profile.isCalibrated) {
+              setSettings(prev => {
+                // Only update if it's different to avoid infinite re-renders
+                if (JSON.stringify(prev.voiceProfile) !== JSON.stringify(profile)) {
+                  return {
+                    ...prev,
+                    voiceProfile: profile,
+                    voiceLock: true // Automatically lock once loaded!
+                  };
+                }
+                return prev;
+              });
+              console.log('[FRIDAY React] Voice profile synchronized from Electron successfully.');
+            }
+          } catch (e) {
+            console.error('[FRIDAY React] Failed to parse Electron voice profile:', e);
+          }
+        }
+      });
+    }
+  }, []);
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMetricsOpen, setIsMetricsOpen] = useState(false);
   const [isVoiceWizardOpen, setIsVoiceWizardOpen] = useState(false);
@@ -540,6 +569,13 @@ export default function App() {
             voiceProfile: profile,
             voiceLock: true // Automatically lock once trained!
           }));
+          
+          // Save to Electron as well!
+          if ((window as any).electronAPI && typeof (window as any).electronAPI.saveVoiceProfile === 'function') {
+            (window as any).electronAPI.saveVoiceProfile(JSON.stringify(profile))
+              .then(() => console.log('[FRIDAY React] Voice profile training synced to Electron userData successfully.'))
+              .catch((err: any) => console.error('[FRIDAY React] Failed to sync training profile to Electron:', err));
+          }
         }}
       />
 
