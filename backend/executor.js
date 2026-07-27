@@ -73,6 +73,46 @@ async function execute(intentObj, attachment = null) {
     return { reply, message: reply, ok: true };
   }
 
+  // ── AGENT ACTIONS ──
+  if (intentObj.action === 'agent_query') {
+    if (typeof window !== 'undefined') {
+      if (typeof window.fridayOpenChat === 'function') window.fridayOpenChat();
+      await new Promise(resolve => setTimeout(resolve, 600));
+      const inputEl = document.getElementById('chat-input');
+      if (inputEl) inputEl.value = intentObj.query;
+      if (window.fridayAgent && typeof window.fridayAgent.run === 'function') {
+        window.fridayAgent.run(intentObj.query, document.getElementById('chat-messages'));
+      }
+    }
+    return { reply: 'Running deep analysis. Check the intelligence report.', message: 'Running deep analysis. Check the intelligence report.', ok: true };
+  }
+
+  if (intentObj.action === 'agent_followup') {
+    try {
+      const PORT = process.env.PORT || 8888;
+      const res = await fetch(`http://localhost:${PORT}/agent/context`);
+      const ctx = await res.json();
+      if (!ctx.lastTopic) {
+        return { reply: 'I have no previous research context to expand on.', message: 'No context.', ok: true };
+      }
+      
+      const expandedQuery = `Based on your previous research on ${ctx.lastTopic}, please expand with more detail on: ${intentObj.query}`;
+      
+      if (typeof window !== 'undefined') {
+        if (typeof window.fridayOpenChat === 'function') window.fridayOpenChat();
+        await new Promise(resolve => setTimeout(resolve, 600));
+        const inputEl = document.getElementById('chat-input');
+        if (inputEl) inputEl.value = intentObj.query;
+        if (window.fridayAgent && typeof window.fridayAgent.run === 'function') {
+          window.fridayAgent.run(expandedQuery, document.getElementById('chat-messages'));
+        }
+      }
+      return { reply: 'Expanding on previous research. Check the intelligence report.', message: 'Expanding on previous research.', ok: true };
+    } catch (e) {
+      return { reply: 'Failed to access agent context.', message: 'Context error.', ok: false };
+    }
+  }
+
   // ── SPOTIFY PATH ──────────────────────────────────────────
   if (intentObj.intent === "SPOTIFY" || intentObj.intent.startsWith("spotify")) {
     const action = intentObj.params?.action || intentObj.intent;

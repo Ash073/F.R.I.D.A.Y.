@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 // Standalone smart-routing VAD local-first fetch client to bypass sandbox require restrictions
-let LOCAL = 'http://localhost:8888';
+let LOCAL = 'http://localhost:3131';
 const CLOUD = 'https://f-r-i-d-a-y-8ixf.onrender.com';
 const cloudOnlyFeatures = ['mobile'];
 
@@ -75,6 +75,10 @@ contextBridge.exposeInMainWorld("friday", {
   getCustomApps: () => ipcRenderer.invoke("friday:get-custom-apps"),
   openSpotify: () => ipcRenderer.send("friday:open-spotify"),
   openExternal: (url) => ipcRenderer.send("friday:open-external", url),
+
+  // Window visibility controls — wake word shows, idle hides
+  showWindow: () => ipcRenderer.send("friday:show-window"),
+  hideWindow: () => ipcRenderer.send("friday:hide-window"),
   
   // Smart-routing fetch clients exposed directly to the React window context
   fridayFetch: (feature, path, options) => fridayFetch(feature, path, options),

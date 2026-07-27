@@ -1,6 +1,6 @@
 // c:\Users\Sayyed Ashif\Downloads\FRIDAY\friday\desktop\src\utils\fridayFetch.js
 
-const LOCAL = 'http://localhost:8888'
+const LOCAL = 'http://localhost:3131'
 const CLOUD = window.FRIDAY_CLOUD_URL || ''
 
 const CLOUD_ONLY = ['spotify']

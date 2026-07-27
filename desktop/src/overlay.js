@@ -602,6 +602,13 @@
     vadScore = 0;
     cmdInput.value = '';
     setStatus('Standing by...');
+
+    // Auto-hide the FRIDAY window after 3 seconds of idle
+    setTimeout(() => {
+      if (state === 'idle' && window.friday && typeof window.friday.hideWindow === 'function') {
+        window.friday.hideWindow();
+      }
+    }, 3000);
   }
 
   async function sendTextCommand(text) {
@@ -840,7 +847,7 @@
 
   document.getElementById('closeBtn').addEventListener('click', () => window.close());
 
-  window.FRIDAY_CLOUD_URL = 'YOUR_CLOUD_URL_HERE'
+  window.FRIDAY_CLOUD_URL = 'https://f-r-i-d-a-y-8ixf.onrender.com'
 
   async function showAPIStatus() {
     try {

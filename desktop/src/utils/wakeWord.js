@@ -1,11 +1,11 @@
 // c:\Users\Sayyed Ashif\Downloads\FRIDAY\friday\desktop\src\utils\wakeWord.js
 
 const WAKE_PHRASES = ['hey friday', 'hey, friday', 'hey fridey', 'hey fridy', 'if friday', 'if, friday', 'friday']
-const VOICE_MATCH_THRESHOLD = 0.72
+const VOICE_MATCH_THRESHOLD = 0.65
 const NOISE_GATE_THRESHOLD = 0.015
 const COMMAND_SILENCE_MS = 1800
 const MAX_COMMAND_MS = 8000
-const BACKEND = 'http://localhost:8888'
+const BACKEND = 'http://localhost:3131'
 
 let wakeWordActive = false
 let commandMode = false
@@ -30,20 +30,25 @@ let lastVoiceTime = 0
 async function initWakeWord() {
   console.log('[FRIDAY WAKE] Initializing wake word engine...');
   
-  // 1. Load Voice Profile
+  // 1. Load Voice Profile — MANDATORY for owner-only operation
   try {
     if (window.fridayVoiceEnrollment && typeof window.fridayVoiceEnrollment.loadVoiceProfile === 'function') {
       voiceProfile = await window.fridayVoiceEnrollment.loadVoiceProfile();
     }
     if (!voiceProfile) {
-      console.log('[FRIDAY WAKE] No voice profile enrolled — running without owner verification');
-      voiceProfile = null;
-    } else {
-      console.log('[FRIDAY WAKE] Voice profile loaded successfully for speaker isolation.');
+      console.error('[FRIDAY WAKE] ✗ No voice profile enrolled — FRIDAY is LOCKED. Enroll your voice first.');
+      if (typeof window.fridaySetStatus === 'function') {
+        window.fridaySetStatus('LOCKED', 'Voice enrollment required');
+      }
+      return false; // Do NOT start listening without owner voice profile
     }
+    console.log('[FRIDAY WAKE] ✓ Voice profile loaded — owner-only mode active.');
   } catch (err) {
-    console.error('[FRIDAY WAKE] Error loading voice profile, continuing without verification:', err);
-    voiceProfile = null;
+    console.error('[FRIDAY WAKE] ✗ Error loading voice profile — FRIDAY is LOCKED:', err);
+    if (typeof window.fridaySetStatus === 'function') {
+      window.fridaySetStatus('LOCKED', 'Voice profile error');
+    }
+    return false;
   }
 
   // 2. Request microphone with autoGainControl: false to preserve raw acoustic amplitudes
@@ -88,7 +93,7 @@ async function initWakeWord() {
     wakeWordBuffer = [];
     samplesSinceLastCheck = 0;
 
-    console.log('[FRIDAY WAKE] Wake word engine initialized — listening for: Hey Friday');
+    console.log('[FRIDAY WAKE] Wake word engine initialized — listening for: Hey Friday (owner voice only)');
 
     // 9. Update UI Status
     if (typeof window.fridaySetStatus === 'function') {
@@ -188,27 +193,30 @@ function onAudioChunk(audioProcessingEvent) {
  * Checks rolling audio window for wake word and owner verification.
  */
 async function checkForWakeWord(audioBuffer) {
-  // 1. OWNER VOICE CHECK (if profile exists)
-  if (voiceProfile) {
-    let features;
-    if (window.fridayVoiceEnrollment && typeof window.fridayVoiceEnrollment.extractVoiceFeatures === 'function') {
-      features = window.fridayVoiceEnrollment.extractVoiceFeatures(audioBuffer, analyser);
+  // 1. OWNER VOICE CHECK — MANDATORY (voice profile is guaranteed loaded by initWakeWord)
+  let features;
+  if (window.fridayVoiceEnrollment && typeof window.fridayVoiceEnrollment.extractVoiceFeatures === 'function') {
+    features = window.fridayVoiceEnrollment.extractVoiceFeatures(audioBuffer, analyser);
+  }
+  
+  if (features) {
+    const matchScore = matchVoiceProfile(features);
+    if (matchScore < VOICE_MATCH_THRESHOLD) {
+      // Not the owner's voice — silently reject (log for diagnostics)
+      console.log(`[FRIDAY WAKE] Voice rejected (Score: ${matchScore.toFixed(3)}, need: ${VOICE_MATCH_THRESHOLD})`);
+      isOwnerVoice = false;
+      return false;
     }
-    
-    if (features) {
-      const matchScore = matchVoiceProfile(features);
-      if (matchScore < VOICE_MATCH_THRESHOLD) {
-        console.log(`[FRIDAY WAKE] Voice detected but not owner (Score: ${matchScore.toFixed(3)}) — ignoring`);
-        isOwnerVoice = false;
-        return false;
-      }
-      isOwnerVoice = true;
-    }
+    isOwnerVoice = true;
+    console.log(`[FRIDAY WAKE] ✓ Owner voice confirmed (Score: ${matchScore.toFixed(3)})`);
   } else {
+    // Could not extract features — reject for safety
+    console.log('[FRIDAY WAKE] Could not extract voice features — rejecting');
     isOwnerVoice = false;
+    return false;
   }
 
-  // 2. SEND TO WHISPER FOR WAKE WORD TRANSCRIPTION
+  // 2. SEND TO WHISPER FOR WAKE WORD TRANSCRIPTION (only reached if voice matched owner)
   try {
     const wavBlob = encodeWAV(audioBuffer);
     const formData = new FormData();
@@ -258,7 +266,7 @@ async function checkForWakeWord(audioBuffer) {
     }
 
     if (isMatched) {
-      console.log(`[FRIDAY WAKE] Wake word detected! Transcript: "${transcript}". Owner Voice: ${voiceProfile ? isOwnerVoice : 'UNVERIFIED'}`);
+      console.log(`[FRIDAY WAKE] ✓ Wake word detected! Transcript: "${transcript}". Owner voice confirmed (score ≥ ${VOICE_MATCH_THRESHOLD})`);
       onWakeWordDetected();
       return true;
     }
@@ -318,6 +326,11 @@ function onWakeWordDetected() {
   commandBuffer = [];
   wakeWordBuffer = []; // clear rolling buffer to avoid double triggers
   
+  // REVEAL THE FRIDAY OVERLAY WINDOW
+  if (window.friday && typeof window.friday.showWindow === 'function') {
+    window.friday.showWindow();
+  }
+
   if (typeof window.fridaySetState === 'function') {
     window.fridaySetState('listening');
   }
@@ -370,6 +383,24 @@ async function finalizeCommand() {
     offset += chunk.length;
   }
   commandBuffer = [];
+
+  // ═══ SECOND VOICE GATE — Verify command audio is also from owner ═══
+  if (voiceProfile && window.fridayVoiceEnrollment && typeof window.fridayVoiceEnrollment.extractVoiceFeatures === 'function') {
+    const cmdFeatures = window.fridayVoiceEnrollment.extractVoiceFeatures(pcmData, analyser);
+    if (cmdFeatures) {
+      const cmdVoiceScore = matchVoiceProfile(cmdFeatures);
+      if (cmdVoiceScore < VOICE_MATCH_THRESHOLD) {
+        console.log(`[FRIDAY WAKE] ✗ Command REJECTED — voice mismatch (Score: ${cmdVoiceScore.toFixed(3)}, required: ${VOICE_MATCH_THRESHOLD})`);
+        if (typeof window.fridaySetState === 'function') window.fridaySetState('idle');
+        if (typeof window.fridaySetStatus === 'function') window.fridaySetStatus('REJECTED', 'Voice not recognized');
+        setTimeout(() => {
+          if (typeof window.fridaySetStatus === 'function') window.fridaySetStatus('PASSIVE', 'Say "Hey Friday"');
+        }, 2000);
+        return;
+      }
+      console.log(`[FRIDAY WAKE] ✓ Command voice verified (Score: ${cmdVoiceScore.toFixed(3)})`);
+    }
+  }
 
   if (typeof window.fridaySetState === 'function') {
     window.fridaySetState('processing');

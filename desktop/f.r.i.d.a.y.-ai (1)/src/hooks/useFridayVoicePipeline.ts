@@ -16,28 +16,43 @@ export interface TranscribeResult {
 // High-resilience, CORS-free Smart Fetch that routes directly from the React context
 export async function smartFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const targetPath = path.startsWith('/') ? path : `/${path}`;
-  const ports = ['3131', '8888'];
   
+  // 1. Try local ports
+  const ports = ['3131', '8888'];
   for (const port of ports) {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 5000);
+    const id = setTimeout(() => controller.abort(), 1500);
     try {
       const res = await fetch(`http://localhost:${port}${targetPath}`, {
         ...options,
         signal: controller.signal
       });
       clearTimeout(id);
-      return res;
+      if (res.ok) return res;
     } catch (err) {
       clearTimeout(id);
     }
   }
 
-  // Fallback to cloud
+  // 2. Try Vercel relative serverless API endpoint if hosted on web
+  try {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 4000);
+    const vercelRes = await fetch(targetPath, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    if (vercelRes.ok) return vercelRes;
+  } catch (err) {
+    // Continue to external fallback
+  }
+
+  // 3. Fallback to backup cloud backend
   return await fetch(`https://f-r-i-d-a-y-8ixf.onrender.com${targetPath}`, options);
 }
 
-// Dynamically auto-detect the active backend base URL (local or cloud)
+// Dynamically auto-detect the active backend base URL (local or cloud/Vercel)
 export async function getBackendBaseUrl(): Promise<string> {
   const ports = ['3131', '8888'];
   for (const port of ports) {
@@ -54,6 +69,11 @@ export async function getBackendBaseUrl(): Promise<string> {
       clearTimeout(id);
     }
   }
+
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    return window.location.origin;
+  }
+
   return `https://f-r-i-d-a-y-8ixf.onrender.com`;
 }
 

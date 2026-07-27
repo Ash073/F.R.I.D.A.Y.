@@ -6,7 +6,7 @@
  */
 
 const CLOUD_URL = window.FRIDAY_CLOUD_URL || 'https://f-r-i-d-a-y-8ixf.onrender.com';
-const LOCAL_URL = 'http://localhost:8888';
+const LOCAL_URL = 'http://localhost:3131';
 
 let progressInterval = null;
 

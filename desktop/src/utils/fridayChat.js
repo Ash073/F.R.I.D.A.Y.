@@ -3,7 +3,7 @@
 // ────────────────────────────────────────
 // STATE VARIABLES
 // ────────────────────────────────────────
-const BACKEND = 'http://localhost:8888';
+const BACKEND = 'http://localhost:3131';
 let currentMode = 'auto';
 let isProcessing = false;
 let attachedFiles = [];
@@ -148,24 +148,41 @@ async function sendMessage() {
       fullMessage += res;
     });
     
-    const response = await fetch(`${BACKEND}/ask`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: fullMessage, mode: currentMode })
-    });
-    
-    hideTyping();
-    
-    if (response.ok) {
-      const data = await response.json();
-      appendMessage('ai', data.reply, data.mode);
-      
-      if (typeof window.fridaySetState === 'function') {
-        window.fridaySetState('speaking');
-        setTimeout(() => window.fridaySetState('idle'), 2000);
-      }
+    // 1. Check if agent mode needed
+    let needsAgent = false;
+    if (window.fridayAgent && window.fridayAgent.classify) {
+      needsAgent = await window.fridayAgent.classify(fullMessage);
+    }
+
+    // 2. If needsAgent is true
+    if (needsAgent && window.fridayAgent && window.fridayAgent.run) {
+      // hideTyping will be handled internally by the agent or final report rendering,
+      // or we can hide it now and let agent render its own. Actually the agent ui
+      // inserts itself. Let's hide the default typing so they don't clash, or the agent 
+      // UI can just insert above it.
+      hideTyping();
+      await window.fridayAgent.run(fullMessage, document.getElementById('chat-messages'));
     } else {
-      appendMessage('ai', 'I encountered an issue processing that request. Please try again.', 'error');
+      // 3. If needsAgent is false, continue with existing /ask fetch
+      const response = await fetch(`${BACKEND}/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: fullMessage, mode: currentMode })
+      });
+      
+      hideTyping();
+      
+      if (response.ok) {
+        const data = await response.json();
+        appendMessage('ai', data.reply, data.mode);
+        
+        if (typeof window.fridaySetState === 'function') {
+          window.fridaySetState('speaking');
+          setTimeout(() => window.fridaySetState('idle'), 2000);
+        }
+      } else {
+        appendMessage('ai', 'I encountered an issue processing that request. Please try again.', 'error');
+      }
     }
   } catch (err) {
     console.error('[FRIDAY CHAT] sendMessage error:', err);

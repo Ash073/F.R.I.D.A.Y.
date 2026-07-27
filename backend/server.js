@@ -35,6 +35,7 @@ const { execute } = require("./executor");
 const { handleFollowUp } = require("./actionEngine");
 const spotifyRouter = require("./spotify");
 const { askFriday, clearHistory, getHistory, getAPIStatus } = require('./aiQuery');
+const { runAgent, needsAgentMode } = require('./fridayAgent');
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -81,7 +82,7 @@ function startWhisperProcess() {
   const cleanEnv = { ...process.env };
   delete cleanEnv.SSLKEYLOGFILE;
 
-  whisperProcess = spawn("python", [TRANSCRIBE_SCRIPT, "--serve"], { env: cleanEnv });
+  whisperProcess = spawn("python", [TRANSCRIBE_SCRIPT, "--serve"], { env: cleanEnv, windowsHide: true });
   let stdoutBuffer = "";
 
   whisperProcess.stdout.on("data", (data) => {
@@ -267,6 +268,8 @@ app.post("/ask", async (req, res) => {
 app.post("/ask/clear", (req, res) => {
   try {
     clearHistory();
+    const { sessionContext } = require('./fridayAgent');
+    if (sessionContext) sessionContext.clear();
     return res.status(200).json({
       success: true,
       message: 'Conversation history cleared'
@@ -297,6 +300,99 @@ app.get("/ask/status", (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
+});
+
+// ────────────────────────────────────────
+// POST /agent/run
+// ────────────────────────────────────────
+app.post("/agent/run", async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  const { query } = req.body;
+  if (!query) {
+    res.write(`data: ${JSON.stringify({ type: 'error', text: 'Query is required' })}\n\n`);
+    return res.end();
+  }
+
+  function sendEvent(data) {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  }
+
+  sendEvent({ type: 'start', query });
+
+  try {
+    for await (const update of runAgent(query)) {
+      sendEvent(update);
+      if (update.type === 'final') break;
+    }
+    sendEvent({ type: 'done' });
+    res.end();
+  } catch (err) {
+    sendEvent({ type: 'error', text: err.message });
+    res.end();
+  }
+});
+
+// ────────────────────────────────────────
+// POST /agent/classify
+// ────────────────────────────────────────
+app.post("/agent/classify", (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.status(400).json({ error: 'query required' });
+    const needsAgent = needsAgentMode(query);
+    res.json({ needsAgent, query });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ────────────────────────────────────────
+// GET /agent/context
+// ────────────────────────────────────────
+app.get("/agent/context", (req, res) => {
+  try {
+    const { sessionContext } = require('./fridayAgent');
+    if (!sessionContext) return res.json({});
+    
+    const context = {
+      lastTopic: sessionContext.get('last_research_topic'),
+      lastSummary: sessionContext.get('last_research_summary'),
+      lastSources: sessionContext.get('last_research_sources'),
+      lastTime: sessionContext.get('last_research_time'),
+      memoryEntries: []
+    };
+    
+    // Extract any memories from agentTools agentMemory if needed
+    const { agentMemory } = require('./agentTools');
+    if (agentMemory) {
+      for (const [key, value] of agentMemory.entries()) {
+        context.memoryEntries.push({ key, value });
+      }
+    }
+    
+    res.json(context);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /agent/tools
+// ────────────────────────────────────────
+app.get("/agent/tools", (req, res) => {
+  res.json([
+    { name: 'web_search', description: 'Search the web', args: 'query' },
+    { name: 'wikipedia', description: 'Wikipedia lookup', args: 'topic' },
+    { name: 'arxiv_search', description: 'Academic paper search', args: 'query' },
+    { name: 'calculate', description: 'Math calculator', args: 'expression' },
+    { name: 'analyze_text', description: 'Text analysis', args: 'text, task' },
+    { name: 'fetch_url', description: 'Read a webpage', args: 'url' },
+    { name: 'remember', description: 'Store information', args: 'key, value' },
+    { name: 'recall', description: 'Retrieve information', args: 'key' }
+  ]);
 });
 
 // POST /execute — execute command actions directly

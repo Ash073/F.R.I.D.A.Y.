@@ -185,6 +185,26 @@ function parseIntent(text) {
     }
   }
   
+  // ── AGENT VOICE TRIGGERS ──
+  const agentTriggers = [
+    'research for me', 'deep dive into', 'investigate',
+    'give me a full report on', 'analyze in detail',
+    'what are the latest papers on', 'summarize everything about',
+    'compare and contrast', 'find everything about',
+    'intelligence report on', 'run analysis on'
+  ];
+  if (agentTriggers.some(t => lower.includes(t))) {
+    return { action: 'agent_query', query: transcript, forceAgent: true, intent: 'AGENT_QUERY', type: 'command', raw: text };
+  }
+
+  const agentFollowupTriggers = [
+    'go deeper', 'tell me more about that', 'expand on',
+    'what else did you find'
+  ];
+  if (agentFollowupTriggers.some(t => lower.includes(t))) {
+    return { action: 'agent_followup', query: transcript, intent: 'AGENT_FOLLOWUP', type: 'command', raw: text };
+  }
+
   // If classified as query, or no pattern matched
   return { action: 'ai_query', query: transcript, mode: currentMode, intent: 'AI_QUERY', type: 'query', raw: text };
 }

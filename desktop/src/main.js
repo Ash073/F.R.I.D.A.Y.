@@ -23,7 +23,7 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 function checkBackendHealth() {
   return new Promise((resolve) => {
-    const req = http.get('http://localhost:8888/health', { timeout: 3000 }, (res) => {
+    const req = http.get('http://localhost:3131/health', { timeout: 3000 }, (res) => {
       if (res.statusCode === 200) {
         resolve(true);
       } else {
@@ -73,12 +73,14 @@ function createWindow() {
     resizable:       false,
     skipTaskbar:     true,
     hasShadow:       false,
+    show:            false, // Hidden by default, revealed by wake word
 
     webPreferences: {
       preload:          path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration:  false,
       webSecurity:      false, // Allows file:// page to fetch from http://localhost:3131 CORS-free!
+      backgroundThrottling: false, // Keep wake word engine running when window is hidden
     },
   });
 
@@ -101,9 +103,25 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, "../f.r.i.d.a.y.-ai (1)/dist/index.html"));
+  // win.webContents.openDevTools(); // Disabled to prevent terminal popup
 }
 
 app.whenReady().then(async () => {
+  // Auto-start FRIDAY on Windows login (only if packaged)
+  if (app.isPackaged) {
+    app.setLoginItemSettings({
+      openAtLogin: true,
+      path: process.execPath,
+      args: []
+    });
+  } else {
+    app.setLoginItemSettings({
+      openAtLogin: false,
+      path: process.execPath,
+      args: []
+    });
+  }
+
   await waitForBackend();
   
   const VOICE_PROFILE_PATH = path.join(app.getPath('userData'), 'friday_voice_profile.json');
@@ -144,6 +162,23 @@ app.on("window-all-closed", () => app.quit());
 ipcMain.on("friday:minimize", () => {
   // Close and quit the entire F.R.I.D.A.Y. AI system completely
   app.quit();
+});
+
+// ── SHOW / HIDE WINDOW IPC ── Wake word reveals, idle hides
+ipcMain.on("friday:show-window", () => {
+  if (win && !win.isDestroyed()) {
+    win.show();
+    win.setAlwaysOnTop(true);
+    win.focus();
+    console.log('[FRIDAY] Window revealed by wake word');
+  }
+});
+
+ipcMain.on("friday:hide-window", () => {
+  if (win && !win.isDestroyed()) {
+    win.hide();
+    console.log('[FRIDAY] Window hidden — listening in background');
+  }
 });
 
 // Relay execute request from renderer → backend
